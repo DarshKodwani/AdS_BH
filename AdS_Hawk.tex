@@ -1,0 +1,166 @@
+\documentclass[aps,showpacs,onecolumn,floats,prd,superscriptaddress,nofootinbib]{revtex4-1} 
+\usepackage{graphicx,amsmath,amssymb,amstext}
+\usepackage{amssymb,amsbsy,amsfonts,amsthm,color}
+\usepackage{epsfig}
+%\usepackage{showkeys}
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage{sidecap}
+\usepackage{floatrow}
+\graphicspath{{Figures/}}
+
+\begin{document}
+
+\title{Notes for AdS }
+
+\author{Darsh Kodwani}
+\email{dkodwani@physics.utoronto.ca}
+\affiliation{Canadian Institute of Theoretical Astrophysics, 60 St George St, Toronto, ON M5S 3H8, Canada.}
+\affiliation{University of Toronto, Department of Physics, 60 St George St, Toronto, ON M5S 3H8, Canada.}
+
+\author{Ue-Li Pen}
+\email{pen@cita.utoronto.ca}
+\affiliation{Canadian Institute of Theoretical Astrophysics, 60 St George St, Toronto, ON M5S 3H8, Canada.}
+\affiliation{Canadian Institute for Advanced Research, CIFAR program in Gravitation and Cosmology.}
+\affiliation{Dunlap Institute for Astronomy \& Astrophysics, University of Toronto, AB 120-50 St. George Street, Toronto, ON M5S 3H4, Canada.}
+\affiliation{Perimeter Institute of Theoretical Physics, 31 Caroline Street North, Waterloo, ON N2L 2Y5, Canada.}
+
+\author{I-Sheng Yang}
+
+\email{isheng.yang@gmail.com}
+\affiliation{Canadian Institute of Theoretical Astrophysics, 60 St George St, Toronto, ON M5S 3H8, Canada.}
+\affiliation{Perimeter Institute of Theoretical Physics, 31 Caroline Street North, Waterloo, ON N2L 2Y5, Canada.}
+
+\begin{abstract}
+
+\end{abstract}
+
+\maketitle
+
+
+\section{Introduction and Summary}
+
+Choose the metric
+
+\begin{equation}
+	ds^2 = - \left( 1 - b^2r^2 \right) dt^2 + \left( 1 - b^2r^2 \right)^{-1} dr^2 + r^2 d \Omega_2^2
+\end{equation}
+
+where $b^2 = \frac{\Lambda}{3}$. For a black hole of mass $M$ we have
+
+\begin{equation}
+	ds^2 = - \left( 1 - \frac{2M}{r} - b^2 r^2 \right) dt^2 + \left( 1 - \frac{2M}{r} - b^2 r^2 \right)^{-1} dr^2 + r^2 d \Omega^2_2
+\end{equation}
+
+we know
+
+\begin{equation}
+	\frac{\Delta T}{T} = \sqrt{\frac{g_{00}(b, r_2) g_{00}(b, \Delta M, r_0)}{g_{00}(b, r_1) g_{00}(b, \Delta M, r_1)}} -1
+\end{equation}
+
+where
+
+\begin{eqnarray}
+	g_{00}(\Lambda, r) & = & - \left( 1 - b^2 r^2 \right)	\nonumber	\\
+	g_{00}(\Lambda, \Delta M, r) & = & - \left( 1 - \frac{2 \Delta M}{r} - b^2 r^2 \right)
+\end{eqnarray}
+
+The induced metrics we will use are
+
+\begin{equation}
+	ds^2_I = g_{\alpha \beta} dx^\alpha dx^\beta  =-( 1 - b^2 r^2) dt^2 + (1 - b^2 r^2 ) dr^2 + r^2 d \Omega^2_2 
+\end{equation}
+
+\begin{equation}
+	ds^2_{II} = g_{\alpha \beta} dx^\alpha dx^\beta  =- ( 1 - b^2 r^2) dt^2 + (1 - b^2 r^2 ) dr^2 + r^2 d \Omega^2_2 
+\end{equation}
+
+The induced metrics are
+
+\begin{equation}
+	ds^2_{3(I)} = h_{ab}^{(I)} dy^a dy^b = h_{00}^{(I)} d \hat{t}^2 + h_{11}^{(I)} d \hat{\theta}^2 + h^{(I)}_{22} d \hat{\phi}^2
+\end{equation}
+
+\begin{equation}
+	ds^2_{3(II)} = h_{ab}^{(II)} dy'^a dy'^b = h_{00}^{(II)} d \hat{t'}^2 + h_{11}^{(II)} d \hat{\theta '}^2 + h^{(II)}_{22} d \hat{\phi '}^2
+\end{equation}
+
+matching the induced metrics at $r_1$ gives
+
+\begin{equation}
+	dt = \frac{g_{00}^{(II)}(r_1)}{g_{00}^{(I)}(r_1)} dt'
+\end{equation}
+
+We will need the stress energy of the shell and use the IJC for that. Lets look at the extrinsic curvature components first
+
+\begin{equation}
+	K^{(I)}_{ab} = \frac{1}{2} g^{(I)}_{\alpha \beta} e^\alpha_a e^\beta_b
+\end{equation}
+
+where 
+
+\begin{equation}
+	e^\alpha_a = \frac{d x^\alpha}{dy^a}
+\end{equation}
+
+which we can simplify 
+
+\begin{equation}
+	K_{tt}^{(I)} = \frac{1}{2} (g_{tt}^{(I)})^{-\frac{1}{2}}  \partial_r g_{tt}^{(I)}
+\end{equation}
+
+similarly the other components of the extrinsic curvature are
+
+\begin{equation}
+	K_{\theta \theta}^{(I)}= \frac{1}{2} n^r \partial_r g^{(I)}_{\theta \theta} = \frac{1}{2} (g_{tt}^{(I)})^{-\frac{1}{2}} \partial_r g_{\theta \theta}^{(I)} = K_{\phi \phi}^{(I)}
+\end{equation}
+
+\begin{equation}
+	K_{tt}^{(II)} = \frac{1}{2} (g_{tt}^{(II)})^{-\frac{1}{2}}  \partial_r g_{tt}^{(II)}
+\end{equation}
+
+\begin{equation}
+	K_{\theta \theta}^{(II)}= \frac{1}{2} n^r \partial_r g^{(II)}_{\theta \theta} = \frac{1}{2} (g_{tt}^{(II)})^{-\frac{1}{2}} \partial_r g_{\theta \theta}^{(II)} = K_{\phi \phi}^{(II)}
+\end{equation}
+
+The surface stress energy is
+
+\begin{equation}
+	S_{00} = \sigma = \frac{1}{4 \pi} ((K^\theta_\theta)^{(I)} - (K^\theta_{\theta})^{(II)})
+\end{equation}
+
+\begin{equation}
+	\sigma = \frac{1}{4 \pi r_1^2} \left( \left( 1 - b^2r_1^2 - \frac{2 \Delta M}{r_1} \right)^{-\frac{1}{2}} - \left( 1- b^2 r_1^2 \right)^{-\frac{1}{2}} \right)
+\end{equation}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\bibliography{all_active}
+
+
+\end{document}
