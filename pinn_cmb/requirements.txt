@@ -1,0 +1,8 @@
+jax[cpu]>=0.12
+numpy>=2.0
+scipy>=1.14
+classy==3.4.1.0
+optax>=0.2.8
+matplotlib>=3.9
+pyyaml>=6.0
+pytest>=8.0

@@ -1,0 +1,35 @@
+# Phase 0: reference solver vs CLASS (Newtonian gauge).
+cosmology:
+  h: 0.6736
+  omega_b: 0.02237
+  omega_cdm: 0.1200
+  N_ur: 3.046
+  T_cmb: 2.7255
+
+k_values: [0.01, 0.05]          # 1/Mpc
+tau_max_over_tau_rec: 2.0        # compare from CLASS's first sample to 2 tau_rec
+
+solver:
+  mode: tca                      # tca | full | tca_only
+  lmax_g: 17
+  lmax_pol: 17
+  lmax_nu: 17
+  rtol: 1.0e-10
+  atol: 1.0e-13
+  tca_trigger:                   # CLASS defaults
+    tau_c_over_tau_h: 0.015
+    tau_c_over_tau_k: 0.01
+
+# Matched so that CLASS integrates the same truncated hierarchy without late-time
+# fluid / streaming approximations.
+class_precision:
+  l_max_g: 17
+  l_max_pol_g: 17
+  l_max_ur: 17
+  radiation_streaming_approximation: 3   # rsa_none
+  ur_fluid_approximation: 3              # ufa_none
+  tol_perturbations_integration: 1.0e-8
+
+acceptance:
+  variables: [phi, delta_c, delta_g]
+  tolerance: 0.01
