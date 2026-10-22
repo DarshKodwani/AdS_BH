@@ -1,17 +1,22 @@
-"""Pilot: can a PINN solve the tight-coupled system at one k to ~1e-3?
+"""Single-k PINN pilots for the tight-coupled system (zeroth-order TCA, lmax_nu = 4).
 
-Single mode k = 0.01 Mpc^-1, zeroth-order TCA layout with lmax_nu = 4, tau in
-[tau_i, 200] Mpc. Training is data-free: only the residuals of equations.rhs (plus,
-optionally, the Einstein 00 constraint) enter the loss. The reference solver is used
-only to measure the error afterwards.
+Training is data-free: only the residuals of equations.rhs and the Einstein 00
+constraint enter the loss. The reference solver is used only to measure the error.
 
-Network: x = log(tau/tau_i)/log(tau_max/tau_i) in [0, 1] -> MLP -> N(x) in R^11.
-Hard initial conditions: u(x) = u_IC + (1 - exp(-x/eps)) * S * N(x), with physically
-chosen scales S (delta, phi ~ psi_0; theta ~ k psi_0; F_nu,l ~ psi_0).
+Network: x = log(tau/tau_i)/log(tau_max/tau_i) in [0, 1] -> MLP.
+Hard initial conditions: u(x) = u_IC + (1 - exp(-x/eps)) * S(tau) * N(x), where S(tau)
+is each variable's physical size (theta ∝ k^2 tau and F_nu,l ∝ (k tau)^l outside the
+horizon, O(1) inside it).
+
+With --ansatz osc, the bracket N(x) becomes
+    N0 + D (N1 cos k r_s + N2 sin k r_s) + N3 cos k tau + N4 sin k tau,
+D = exp(-k^2 / k_D^2), i.e. smooth envelopes times the acoustic phase of the
+photon-baryon fluid and the free-streaming phase of the neutrinos.
 Residual, per variable, in log time and in units of S:
-    r = (du/dx / L - tau f(tau, u)) / S,    L = log(tau_max / tau_i).
+    r = (du/dx / L - tau f(tau, u)) / S(tau),    L = log(tau_max / tau_i).
 
-    python -m pinn_cmb.pilots.pilot_single_k --variant base|constraint|causal|all
+Pilot 1:  python -m pinn_cmb.pilots.pilot_single_k --variant all
+Pilot 2:  python -m pinn_cmb.pilots.pilot_single_k --k 0.05 --tau-max switch --ansatz osc ...
 """
 
 from __future__ import annotations
@@ -31,8 +36,6 @@ from pinn_cmb import equations as eq
 from pinn_cmb import initial_conditions as ics
 from pinn_cmb import reference as ref
 
-K = 0.01
-TAU_MAX = 200.0
 LAYOUT = eq.Layout(tca=True, lmax_nu=4)
 VARIANTS = {
     "base": dict(w_constraint=0.0, causal_eps=0.0),
@@ -58,8 +61,8 @@ def mlp(params, x):
 
 
 class Problem:
-    def __init__(self, bg, k=K, tau_max=TAU_MAX, eps=0.1):
-        self.bg, self.k = bg, k
+    def __init__(self, bg, k, tau_max, ansatz="none", eps=0.1):
+        self.bg, self.k, self.tau_max, self.ansatz = bg, k, tau_max, ansatz
         self.tau_i = ics.default_tau_i(k, bg)
         self.L = float(np.log(tau_max / self.tau_i))
         self.u0 = ics.initial_state(k, self.tau_i, bg, LAYOUT)
@@ -71,6 +74,11 @@ class Problem:
         self.power = jnp.array([power[n] for n in LAYOUT.names], dtype=float)
         self.k_factor = jnp.array([k if n.startswith("theta") else 1.0 for n in LAYOUT.names])
         self.eps = eps
+        self.n_heads = 5 if ansatz == "osc" else 1
+
+    @property
+    def n_out(self):
+        return self.n_heads * LAYOUT.size
 
     def tau(self, x):
         return self.tau_i * jnp.exp(self.L * x)
@@ -80,9 +88,21 @@ class Problem:
         g = self.k * tau / jnp.sqrt(1.0 + (self.k * tau) ** 2)
         return self.psi0 * self.k_factor * g**self.power
 
+    def bracket(self, params, x):
+        out = mlp(params, x[None])
+        if self.ansatz != "osc":
+            return out
+        n = out.reshape(self.n_heads, LAYOUT.size)
+        tau = self.tau(x)
+        ph_s = self.k * bgm.sound_horizon(self.bg, tau)
+        damp = jnp.exp(-((self.k / bgm.damping_wavenumber(self.bg, tau)) ** 2))
+        ph_f = self.k * tau
+        return (n[0] + damp * (n[1] * jnp.cos(ph_s) + n[2] * jnp.sin(ph_s))
+                + n[3] * jnp.cos(ph_f) + n[4] * jnp.sin(ph_f))
+
     def u(self, params, x):
         """Solution at a scalar x, with the initial condition built in exactly."""
-        return self.u0 + (1.0 - jnp.exp(-x / self.eps)) * self.scale(self.tau(x)) * mlp(params, x[None])
+        return self.u0 + (1.0 - jnp.exp(-x / self.eps)) * self.scale(self.tau(x)) * self.bracket(params, x)
 
     def residuals(self, params, x):
         """(per-variable ODE residual, 00-constraint residual) at a scalar x."""
@@ -115,10 +135,11 @@ def stratified(key, n_bins, per_bin):
 
 
 def train(prob: Problem, variant: str, *, seed=0, width=64, depth=4, adam_steps=20000,
-          lbfgs_steps=3000, n_bins=32, per_bin=64, log=print):
+          lbfgs_steps=3000, n_bins=32, per_bin=64, log=print, tag=None):
     cfg = VARIANTS[variant]
+    tag = tag or variant
     key = jax.random.PRNGKey(seed)
-    params = init_mlp(key, [1] + [width] * depth + [LAYOUT.size])
+    params = init_mlp(key, [1] + [width] * depth + [prob.n_out])
     loss_fn = make_loss(prob, cfg["w_constraint"], cfg["causal_eps"], n_bins)
 
     sched = optax.cosine_decay_schedule(1e-3, adam_steps, alpha=1e-2)
@@ -139,7 +160,7 @@ def train(prob: Problem, variant: str, *, seed=0, width=64, depth=4, adam_steps=
         params, state, l, w = adam_step(params, state, sub)
         if i % 2000 == 0 or i == adam_steps - 1:
             history.append(("adam", i, float(l)))
-            log(f"[{variant}] adam {i:6d} loss {float(l):.3e} min causal w {float(jnp.min(w)):.2f} ({time.time()-t0:.0f}s)")
+            log(f"[{tag}] adam {i:6d} loss {float(l):.3e} min causal w {float(jnp.min(w)):.2f} ({time.time()-t0:.0f}s)")
 
     # L-BFGS polish on a fixed, denser collocation set; plain residual loss (no causal weights).
     x_fix = stratified(jax.random.PRNGKey(seed + 1), n_bins, 2 * per_bin)
@@ -157,10 +178,13 @@ def train(prob: Problem, variant: str, *, seed=0, width=64, depth=4, adam_steps=
 
     for i in range(lbfgs_steps):
         params, lstate, l = lbfgs_step(params, lstate)
-        if i % 500 == 0 or i == lbfgs_steps - 1:
+        if i % 1000 == 0 or i == lbfgs_steps - 1:
             history.append(("lbfgs", i, float(l)))
-            log(f"[{variant}] lbfgs {i:6d} loss {float(l):.3e} ({time.time()-t0:.0f}s)")
+            log(f"[{tag}] lbfgs {i:6d} loss {float(l):.3e} ({time.time()-t0:.0f}s)")
     return params, history, time.time() - t0
+
+
+ERROR_VARS = ("phi", "psi", "delta_c", "theta_c", "delta_b", "delta_g", "theta_g", "delta_nu", "theta_nu", "shear_nu")
 
 
 def evaluate(prob: Problem, params, sol: ref.ReferenceSolution) -> dict:
@@ -168,7 +192,7 @@ def evaluate(prob: Problem, params, sol: ref.ReferenceSolution) -> dict:
     u = jax.vmap(lambda s: prob.u(params, s))(x)
     obs = jax.vmap(lambda t, y: eq.observables(t, y, prob.k, prob.bg, LAYOUT))(jnp.asarray(sol.tau), u)
     errs = {}
-    for v in ("phi", "psi", "delta_c", "theta_c", "delta_b", "delta_g", "theta_g", "delta_nu", "theta_nu", "shear_nu"):
+    for v in ERROR_VARS:
         p, r = np.asarray(obs[v]), sol.values[v]
         errs[v] = float(np.max(np.abs(p - r)) / np.max(np.abs(r)))
     errs["max_constraint_00"] = float(np.max(np.abs(np.asarray(obs["constraint_00"]))))
@@ -177,7 +201,11 @@ def evaluate(prob: Problem, params, sol: ref.ReferenceSolution) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--k", type=float, default=0.01)
+    ap.add_argument("--tau-max", default="200", help="Mpc, or 'switch' for the CLASS-default TCA switch time")
+    ap.add_argument("--ansatz", default="none", choices=["none", "osc"])
     ap.add_argument("--variant", default="all", choices=["all", *VARIANTS])
+    ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--adam-steps", type=int, default=20000)
     ap.add_argument("--lbfgs-steps", type=int, default=3000)
     ap.add_argument("--out", type=Path, default=Path("pinn_cmb/docs/pilot1"))
@@ -185,22 +213,31 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
 
     bg = bgm.build_background()
-    prob = Problem(bg)
-    tau_eval = np.geomspace(prob.tau_i * 1.0001, TAU_MAX, 400)
-    sol = ref.solve(K, bg, tau_eval, mode="tca_only", lmax_nu=LAYOUT.lmax_nu)
-    print(f"tau_i={prob.tau_i:.3g} Mpc, L={prob.L:.2f}; reference max|C00|={np.max(np.abs(sol.values['constraint_00'])):.1e}")
+    tau_i = ics.default_tau_i(args.k, bg)
+    if args.tau_max == "switch":
+        tau_max = ref.tca_switch_time(args.k, bg, ref.TCATrigger(), tau_i, 2 * bg.tau_rec)
+    else:
+        tau_max = float(args.tau_max)
+    prob = Problem(bg, args.k, tau_max, args.ansatz)
+    tau_eval = np.geomspace(prob.tau_i * 1.0001, tau_max, 600)
+    sol = ref.solve(args.k, bg, tau_eval, mode="tca_only", lmax_nu=LAYOUT.lmax_nu)
+    n_osc = float(args.k * bgm.sound_horizon(bg, tau_max)) / (2 * np.pi)
+    print(f"k={args.k} tau_i={prob.tau_i:.3g} tau_max={tau_max:.1f} Mpc, L={prob.L:.2f}, "
+          f"acoustic oscillations={n_osc:.2f}, ansatz={args.ansatz}")
 
-    results = {}
-    curves = {}
+    results, curves = {}, {}
     for variant in (VARIANTS if args.variant == "all" else [args.variant]):
-        params, hist, secs = train(prob, variant, adam_steps=args.adam_steps, lbfgs_steps=args.lbfgs_steps)
+        tag = f"k={args.k},{args.ansatz},{variant}"
+        params, hist, secs = train(prob, variant, seed=args.seed, adam_steps=args.adam_steps,
+                                   lbfgs_steps=args.lbfgs_steps, tag=tag)
         errs, obs = evaluate(prob, params, sol)
-        results[variant] = {"errors": errs, "train_seconds": secs, "final_loss": hist[-1][2], "history": hist}
+        results[variant] = {"k": args.k, "tau_max": tau_max, "ansatz": args.ansatz, "seed": args.seed,
+                            "errors": errs, "train_seconds": secs, "final_loss": hist[-1][2], "history": hist}
         curves[variant] = obs
-        print(f"[{variant}] " + " ".join(f"{k}={v:.1e}" for k, v in errs.items()) + f"  ({secs:.0f}s)")
+        print(f"[{tag}] RESULT " + " ".join(f"{k}={v:.1e}" for k, v in errs.items()) + f"  ({secs:.0f}s)")
 
     (args.out / "results.json").write_text(json.dumps(results, indent=1))
-    plot(sol, curves, args.out / "pilot1.png")
+    plot(sol, curves, args.out / "pilot.png")
 
 
 def plot(sol, curves, path):
@@ -209,7 +246,7 @@ def plot(sol, curves, path):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    vs = ("phi", "delta_c", "delta_g", "theta_g")
+    vs = ("phi", "delta_c", "delta_g", "theta_g", "delta_nu")
     fig, ax = plt.subplots(2, len(vs), figsize=(4 * len(vs), 6), sharex=True)
     for j, v in enumerate(vs):
         r = sol.values[v]
