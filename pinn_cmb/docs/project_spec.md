@@ -60,6 +60,7 @@ Notation: ℋ = ȧ/a, R = 3ρ_b / (4ρ_γ), κ̇ = a n_e σ_T, dots are d/dτ.
   **[rev]** Multiply the oscillating part by the Silk damping envelope: X = e^{−k²/k_D²(τ)}[A cos(k r_s) + B sin(k r_s)] + C. k_D(τ) is tabulated (`background.damping_wavenumber`). Prior art: CosmicNet I (1907.05764) used the same basis as network *inputs*; ours puts it in the output structure.
 - **Architecture:** an MLP of 4–6 layers × 64–128 units with tanh or SiLU activations, plus random Fourier features on τ̃ (σ ≈ 1–5) if the ansatz alone isn't enough.
 - **Loss:** a weighted sum of squared ODE residuals (computed with autodiff in τ), each nondimensionalised by a typical scale (e.g. divide the θ equations by k·max|θ|). Add the 00-constraint residual with a small weight.
+  **[rev, pilot 1]** The 00-constraint residual is a **mandatory** loss term at O(1) weight. Without it the error was 30× worse at a lower ODE loss. Scale outputs and residuals by each variable's *time-dependent* physical size: θ ∝ k²τ and F_νℓ ∝ (kτ)^ℓ outside the horizon, rolling over to O(1) inside it. Fixed scales make the loss ill-conditioned by ~1/(kτ)⁴. Write the residual in log time: r = (du/dx·1/L − τ f)/S(τ).
 - **Training:**
   - Use causal weighting (Wang, Sankaran & Perdikaris 2022, "Respecting causality is all you need"), so earlier times converge before later ones are trusted.
   - Use a curriculum: first single k, then a k-range, then the parameter bundle; extend τ_max progressively.
