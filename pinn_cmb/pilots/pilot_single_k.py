@@ -205,6 +205,7 @@ def main():
     ap.add_argument("--tau-max", default="200", help="Mpc, or 'switch' for the CLASS-default TCA switch time")
     ap.add_argument("--ansatz", default="none", choices=["none", "osc"])
     ap.add_argument("--variant", default="all", choices=["all", *VARIANTS])
+    ap.add_argument("--causal-eps", type=float, default=None, help="override the variant's causal epsilon")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--adam-steps", type=int, default=20000)
     ap.add_argument("--lbfgs-steps", type=int, default=3000)
@@ -225,6 +226,9 @@ def main():
     print(f"k={args.k} tau_i={prob.tau_i:.3g} tau_max={tau_max:.1f} Mpc, L={prob.L:.2f}, "
           f"acoustic oscillations={n_osc:.2f}, ansatz={args.ansatz}")
 
+    if args.causal_eps is not None:
+        for v in VARIANTS.values():
+            v["causal_eps"] = args.causal_eps
     results, curves = {}, {}
     for variant in (VARIANTS if args.variant == "all" else [args.variant]):
         tag = f"k={args.k},{args.ansatz},{variant}"
@@ -232,6 +236,7 @@ def main():
                                    lbfgs_steps=args.lbfgs_steps, tag=tag)
         errs, obs = evaluate(prob, params, sol)
         results[variant] = {"k": args.k, "tau_max": tau_max, "ansatz": args.ansatz, "seed": args.seed,
+                            "causal_eps": VARIANTS[variant]["causal_eps"],
                             "errors": errs, "train_seconds": secs, "final_loss": hist[-1][2], "history": hist}
         curves[variant] = obs
         print(f"[{tag}] RESULT " + " ".join(f"{k}={v:.1e}" for k, v in errs.items()) + f"  ({secs:.0f}s)")
