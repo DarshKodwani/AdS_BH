@@ -40,17 +40,22 @@ class TrainConfig:
     seed: int = 0
     log_every: int = 2000
     ckpt_every: int = 250
+    k_power: float = 1.0  # <1 biases the ln k samples towards high k (u -> u**k_power)
 
 
 def stratified(key, n):
     return (jnp.arange(n) + jax.random.uniform(key, (n,))) / n
 
 
-def sample_modes(key, n_k, log_k_range, n_cond):
-    """Stratified ln k and Latin-hypercube conditioning parameters in [-1, 1]."""
+def sample_modes(key, n_k, log_k_range, n_cond, k_power=1.0):
+    """Stratified ln k (warped by u**k_power) and Latin-hypercube conditioning parameters in [-1, 1].
+
+    With a bundle spanning many e-folds of k, uniform ln k puts most points on smooth
+    super-horizon modes; k_power < 1 moves them to the oscillating high-k modes.
+    """
     lo, hi = log_k_range
     k1, k2 = jax.random.split(key)
-    logk = lo + (hi - lo) * stratified(k1, n_k)
+    logk = lo + (hi - lo) * stratified(k1, n_k) ** k_power
     if n_cond == 0:
         return jnp.exp(logk), jnp.zeros((n_k, 0))
     keys = jax.random.split(k2, n_cond)
@@ -130,7 +135,7 @@ def train_window(w: Window, chain: Chain, bg_fn: Callable, cfg: TrainConfig, log
     @jax.jit
     def adam_step(params, state, key):
         k1, k2 = jax.random.split(key)
-        k, cond = sample_modes(k1, cfg.n_k, w.log_k_range, w.n_cond)
+        k, cond = sample_modes(k1, cfg.n_k, w.log_k_range, w.n_cond, cfg.k_power)
         xs, wt = collocation_times(w, k2, k, cond, cfg.n_t, tau_cap)
         u_a = start_states(chain_with, j, k, cond, bg_fn)
         (l, aux), g = jax.value_and_grad(loss, has_aux=True)(params, k, cond, xs, u_a, wt)
@@ -157,7 +162,8 @@ def train_window(w: Window, chain: Chain, bg_fn: Callable, cfg: TrainConfig, log
         start = 0
 
     # L-BFGS on a fixed, denser collocation set.
-    kk, cond = sample_modes(jax.random.PRNGKey(cfg.seed + 7 + 1000 * j), cfg.n_k_lbfgs, w.log_k_range, w.n_cond)
+    kk, cond = sample_modes(jax.random.PRNGKey(cfg.seed + 7 + 1000 * j), cfg.n_k_lbfgs, w.log_k_range, w.n_cond,
+                            cfg.k_power)
     xs, wt = collocation_times(w, jax.random.PRNGKey(cfg.seed + 9), kk, cond, cfg.n_t_lbfgs, tau_cap)
     u_a = u0_fn(kk, cond)
     f = lambda p: loss(p, kk, cond, xs, u_a, wt)[0]
