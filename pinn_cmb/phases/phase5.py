@@ -188,7 +188,7 @@ def cmd_inverse(cfg, bg, out, dir34, mu_true=0.25, sigma_rel=0.01, n_grid=201, n
 
     # gradient-based fit through the PINN (Newton iterations with autodiff derivatives)
     g1, g2 = jax.grad(chi2), jax.grad(jax.grad(chi2))
-    m = jnp.float64(0.0)
+    m = jnp.float64(grid[np.argmin(c_pinn)])  # start Newton at the grid minimum
     for _ in range(8):
         m = m - g1(m) / g2(m)
     sigma_fisher = float(jnp.sqrt(2.0 / g2(m)))
