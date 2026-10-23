@@ -1,0 +1,136 @@
+[w0 0.001-1] adam      0 loss 2.460e+01 (ode 2.40e+01, c00 5.56e-01) 4s
+[w0 0.001-1] adam   2000 loss 3.472e-04 (ode 3.25e-04, c00 2.25e-05) 186s
+[w0 0.001-1] adam   4000 loss 1.182e-04 (ode 1.07e-04, c00 1.10e-05) 404s
+[w0 0.001-1] adam   6000 loss 8.946e-05 (ode 8.08e-05, c00 8.65e-06) 620s
+[w0 0.001-1] adam   8000 loss 4.812e-05 (ode 4.07e-05, c00 7.41e-06) 848s
+[w0 0.001-1] adam   9999 loss 4.233e-05 (ode 3.53e-05, c00 7.00e-06) 1071s
+[w0 0.001-1] lbfgs      0 loss 4.260e-05 1084s
+[w0 0.001-1] lbfgs   2000 loss 9.348e-06 1326s
+[w0 0.001-1] lbfgs   2999 loss 6.196e-06 1424s
+[w1 1-10] adam      0 loss 2.188e+01 (ode 2.15e+01, c00 3.66e-01) 5s
+resumed 1 trained windows
+[w1 1-10] adam      0 loss 2.188e+01 (ode 2.15e+01, c00 3.66e-01) 6s
+[w1 1-10] adam   2000 loss 2.821e-04 (ode 2.65e-04, c00 1.67e-05) 185s
+[w1 1-10] adam   4000 loss 1.441e-04 (ode 1.38e-04, c00 6.35e-06) 366s
+[w1 1-10] adam   6000 loss 7.558e-05 (ode 7.15e-05, c00 4.08e-06) 543s
+[w1 1-10] adam   8000 loss 3.466e-05 (ode 3.16e-05, c00 3.05e-06) 716s
+[w1 1-10] adam   9999 loss 3.240e-05 (ode 2.94e-05, c00 2.98e-06) 890s
+[w1 1-10] lbfgs      0 loss 2.918e-05 902s
+=== 2026-10-23T06:21:13Z pinn_cmb.phases.phase34 train
+resumed 1 trained windows
+[w1 1-10] adam      0 loss 2.188e+01 (ode 2.15e+01, c00 3.66e-01) 6s
+[w1 1-10] adam   2000 loss 2.821e-04 (ode 2.65e-04, c00 1.67e-05) 184s
+=== 2026-10-23T07:23:31Z pinn_cmb.phases.phase34 train
+resumed 1 trained windows
+[w1 1-10] adam      0 loss 2.188e+01 (ode 2.15e+01, c00 3.66e-01) 8s
+[w1 1-10] adam   2000 loss 2.821e-04 (ode 2.65e-04, c00 1.67e-05) 217s
+=== 2026-10-23T08:22:12Z pinn_cmb.phases.phase34 train
+resumed 1 trained windows
+[w1 1-10] resumed adam at step 2250
+[w1 1-10] adam   4000 loss 1.441e-04 (ode 1.38e-04, c00 6.35e-06) 206s
+[w1 1-10] adam   6000 loss 7.558e-05 (ode 7.15e-05, c00 4.08e-06) 421s
+[w1 1-10] adam   8000 loss 3.466e-05 (ode 3.16e-05, c00 3.05e-06) 633s
+[w1 1-10] adam   9999 loss 3.240e-05 (ode 2.94e-05, c00 2.98e-06) 848s
+[w1 1-10] lbfgs      0 loss 2.918e-05 863s
+[w1 1-10] lbfgs   2000 loss 7.392e-06 1106s
+[w1 1-10] lbfgs   2999 loss 4.864e-06 1221s
+[w2 10-30] adam      0 loss 2.427e+01 (ode 2.42e+01, c00 5.87e-02) 7s
+[w2 10-30] adam   2000 loss 7.299e-04 (ode 6.92e-04, c00 3.78e-05) 218s
+[w2 10-30] adam   4000 loss 2.124e-04 (ode 2.05e-04, c00 7.70e-06) 431s
+[w2 10-30] adam   6000 loss 1.992e-04 (ode 1.97e-04, c00 1.93e-06) 630s
+[w2 10-30] adam   8000 loss 5.252e-05 (ode 5.14e-05, c00 1.14e-06) 835s
+[w2 10-30] adam   9999 loss 4.570e-05 (ode 4.45e-05, c00 1.23e-06) 1049s
+[w2 10-30] lbfgs      0 loss 5.264e-05 1064s
+[w2 10-30] lbfgs   2000 loss 1.435e-05 1314s
+[w2 10-30] lbfgs   2999 loss 1.079e-05 1432s
+[w3 30-60] adam      0 loss 3.529e+02 (ode 3.53e+02, c00 2.76e-02) 12s
+[w3 30-60] adam   2000 loss 2.340e+00 (ode 2.34e+00, c00 7.35e-05) 389s
+[w3 30-60] adam   4000 loss 9.564e-01 (ode 9.56e-01, c00 5.31e-05) 757s
+=== FAILED: pinn_cmb.phases.phase34 train
+=== 2026-10-23T09:25:46Z pinn_cmb.phases.phase34 train
+resumed 3 trained windows
+[w3 30-60] adam      0 loss 1.072e+01 (ode 1.07e+01, c00 2.76e-02) 12s
+[w3 30-60] adam   2000 loss 2.151e-04 (ode 2.06e-04, c00 8.82e-06) 383s
+[w3 30-60] adam   4000 loss 1.110e-04 (ode 1.06e-04, c00 4.77e-06) 744s
+[w3 30-60] adam   6000 loss 7.547e-05 (ode 7.04e-05, c00 5.04e-06) 1109s
+[w3 30-60] adam   8000 loss 3.520e-05 (ode 3.32e-05, c00 2.02e-06) 1474s
+[w3 30-60] adam   9999 loss 6.024e-05 (ode 5.62e-05, c00 4.03e-06) 1844s
+[w3 30-60] lbfgs      0 loss 3.461e-05 1865s
+[w3 30-60] lbfgs   2000 loss 1.149e-05 2291s
+[w3 30-60] lbfgs   2999 loss 8.306e-06 2498s
+[w4 60-100] adam      0 loss 2.690e+01 (ode 2.68e+01, c00 8.56e-02) 13s
+[w4 60-100] adam   2000 loss 4.407e-03 (ode 4.33e-03, c00 7.40e-05) 401s
+[w4 60-100] adam   4000 loss 2.013e-03 (ode 1.96e-03, c00 5.47e-05) 778s
+[w4 60-100] adam   6000 loss 6.361e-04 (ode 6.11e-04, c00 2.55e-05) 1136s
+[w4 60-100] adam   8000 loss 2.744e-04 (ode 2.64e-04, c00 1.08e-05) 1506s
+[w4 60-100] adam   9999 loss 2.260e-04 (ode 2.16e-04, c00 1.00e-05) 1874s
+[w4 60-100] lbfgs      0 loss 2.440e-04 1895s
+[w4 60-100] lbfgs   2000 loss 5.466e-05 2315s
+[w4 60-100] lbfgs   2999 loss 3.915e-05 2516s
+[w5 100-150] adam      0 loss 3.586e+01 (ode 3.58e+01, c00 6.98e-02) 14s
+[w5 100-150] adam   2000 loss 3.086e-02 (ode 3.06e-02, c00 2.67e-04) 396s
+[w5 100-150] adam   4000 loss 3.396e-03 (ode 3.35e-03, c00 4.46e-05) 798s
+[w5 100-150] adam   6000 loss 1.042e-03 (ode 1.01e-03, c00 3.21e-05) 1176s
+[w5 100-150] adam   8000 loss 5.554e-04 (ode 5.37e-04, c00 1.86e-05) 1553s
+[w5 100-150] adam   9999 loss 4.244e-04 (ode 4.08e-04, c00 1.63e-05) 1937s
+[w5 100-150] lbfgs      0 loss 5.855e-04 1956s
+=== 2026-10-23T11:25:49Z pinn_cmb.phases.phase34 train
+resumed 5 trained windows
+[w5 100-150] resumed lbfgs at step 1000
+[w5 100-150] lbfgs   2000 loss 7.807e-05 254s
+[w5 100-150] lbfgs   2999 loss 4.650e-05 453s
+[w6 150-200] adam      0 loss 3.277e+01 (ode 3.27e+01, c00 4.72e-02) 12s
+[w6 150-200] adam   2000 loss 2.461e-02 (ode 2.44e-02, c00 1.79e-04) 429s
+[w6 150-200] adam   4000 loss 8.343e-03 (ode 8.27e-03, c00 6.98e-05) 846s
+[w6 150-200] adam   6000 loss 3.964e-03 (ode 3.93e-03, c00 3.58e-05) 1295s
+[w6 150-200] adam   8000 loss 3.375e-03 (ode 3.35e-03, c00 2.05e-05) 1737s
+[w6 150-200] adam   9999 loss 3.076e-03 (ode 3.06e-03, c00 1.96e-05) 2195s
+[w6 150-200] lbfgs      0 loss 4.620e-03 2216s
+[w6 150-200] lbfgs   2000 loss 1.517e-04 2649s
+[w6 150-200] lbfgs   2999 loss 8.199e-05 2852s
+[w7 200-240] adam      0 loss 8.252e+01 (ode 8.25e+01, c00 7.19e-02) 15s
+[w7 200-240] adam   2000 loss 1.767e-01 (ode 1.77e-01, c00 1.99e-04) 473s
+[w7 200-240] adam   4000 loss 7.915e-02 (ode 7.90e-02, c00 1.28e-04) 932s
+[w7 200-240] adam   6000 loss 6.185e-02 (ode 6.18e-02, c00 9.29e-05) 1380s
+[w7 200-240] adam   8000 loss 5.073e-02 (ode 5.07e-02, c00 5.37e-05) 1836s
+[w7 200-240] adam   9999 loss 4.493e-02 (ode 4.49e-02, c00 4.26e-05) 2311s
+[w7 200-240] lbfgs      0 loss 4.512e-02 2334s
+[w7 200-240] lbfgs   2000 loss 5.402e-04 2766s
+[w7 200-240] lbfgs   2999 loss 2.581e-04 2986s
+[w8 240-270] adam      0 loss 2.145e+02 (ode 2.14e+02, c00 1.24e-01) 18s
+[w8 240-270] adam   2000 loss 2.411e-01 (ode 2.41e-01, c00 7.76e-05) 550s
+=== 2026-10-23T13:39:30Z pinn_cmb.phases.phase34 train
+resumed 8 trained windows
+[w8 240-270] resumed adam at step 3250
+[w8 240-270] adam   4000 loss 1.834e-01 (ode 1.83e-01, c00 1.33e-04) 200s
+[w8 240-270] adam   6000 loss 1.155e-01 (ode 1.15e-01, c00 6.75e-05) 664s
+[w8 240-270] adam   8000 loss 1.414e-01 (ode 1.41e-01, c00 6.89e-05) 1131s
+[w8 240-270] adam   9999 loss 8.838e-02 (ode 8.83e-02, c00 6.20e-05) 1590s
+[w8 240-270] lbfgs      0 loss 8.556e-02 1614s
+[w8 240-270] lbfgs   2000 loss 2.299e-03 2037s
+[w8 240-270] lbfgs   2999 loss 1.140e-03 2248s
+[w9 270-300] adam      0 loss 3.549e+02 (ode 3.54e+02, c00 4.23e-01) 18s
+[w9 270-300] adam   2000 loss 3.265e-01 (ode 3.26e-01, c00 6.44e-04) 535s
+[w9 270-300] adam   4000 loss 1.782e-01 (ode 1.78e-01, c00 2.75e-04) 1033s
+[w9 270-300] adam   6000 loss 1.434e-01 (ode 1.43e-01, c00 3.66e-04) 1523s
+[w9 270-300] adam   8000 loss 1.449e-01 (ode 1.45e-01, c00 2.16e-04) 2020s
+[w9 270-300] adam   9999 loss 1.605e-01 (ode 1.60e-01, c00 1.85e-04) 2513s
+[w9 270-300] lbfgs      0 loss 1.033e-01 2538s
+[w9 270-300] lbfgs   2000 loss 1.030e-02 2953s
+[w9 270-300] lbfgs   2999 loss 6.022e-03 3158s
+[w10 300-340] adam      0 loss 3.025e+02 (ode 3.02e+02, c00 3.83e-01) 19s
+[w10 300-340] adam   2000 loss 7.180e-01 (ode 7.17e-01, c00 1.37e-03) 528s
+[w10 300-340] adam   4000 loss 7.826e-01 (ode 7.81e-01, c00 1.15e-03) 1044s
+[w10 300-340] adam   6000 loss 7.090e-01 (ode 7.08e-01, c00 1.46e-03) 1555s
+=== 2026-10-23T15:39:36Z pinn_cmb.phases.phase34 train
+resumed 10 trained windows
+[w10 300-340] resumed adam at step 6750
+[w10 300-340] adam   8000 loss 4.872e-01 (ode 4.86e-01, c00 1.61e-03) 319s
+[w10 300-340] adam   9999 loss 4.878e-01 (ode 4.87e-01, c00 1.23e-03) 809s
+[w10 300-340] lbfgs      0 loss 4.214e-01 833s
+[w10 300-340] lbfgs   2000 loss 6.824e-02 1227s
+[w10 300-340] lbfgs   2999 loss 4.424e-02 1421s
+[w11 340-400] adam      0 loss 4.506e+02 (ode 4.51e+02, c00 1.00e-01) 18s
+[w11 340-400] adam   2000 loss 1.866e+00 (ode 1.86e+00, c00 3.66e-03) 502s
+[w11 340-400] adam   4000 loss 1.514e+00 (ode 1.51e+00, c00 4.41e-03) 993s
+=== FAILED: pinn_cmb.phases.phase34 train

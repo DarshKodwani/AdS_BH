@@ -8,7 +8,7 @@ tca_edges: [1.0e-3, 1.0, 10.0, 30.0]          # TCA valid at tau=30 for all k <=
 full_edges: [30, 60, 100, 150, 200, 240, 270, 300, 340, 400, 480, 600, 800, 1100, 1600, 2400, 3600, 5500, 8500]
 rsa_windows: 3                    # fractions of ln(tau0 / tau_R(k))
 lmax: {g: 12, pol: 10, nu: 17}   # CLASS defaults
-network: {width: 96, depth: 4, ansatz: true}
+network: {width: 96, depth: 4, ansatz: true, slow_row: true}   # slow_row: see model.Window.residuals (v2)
 train:
   adam_steps: 10000
   lbfgs_steps: 3000

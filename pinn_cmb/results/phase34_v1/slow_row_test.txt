@@ -1,0 +1,14 @@
+[w3 30-60] adam   2999 loss 3.527e-04 (ode 3.37e-04, c00 1.56e-05) 744s
+[w3 30-60] lbfgs    999 loss 6.364e-05 1048s
+W3 p=1.0 k=0.003  phi=1.4e-03 delta_g=2.1e-03 theta_g=1.5e-02 delta_b=7.4e-03 theta_b=1.7e-02
+W3 p=1.0 k=0.03   phi=4.2e-03 delta_g=2.0e-03 theta_g=1.7e-02 delta_b=3.2e-03 theta_b=2.1e-02
+W3 p=1.0 k=0.06   phi=4.4e-03 delta_g=1.8e-02 theta_g=4.4e-01 delta_b=1.1e-02 theta_b=4.3e-01
+W3 p=1.0 k=0.09   phi=1.8e-02 delta_g=1.9e-02 theta_g=6.8e-02 delta_b=2.1e-02 theta_b=7.7e-02
+W3 p=1.0 k=0.12   phi=1.0e-01 delta_g=4.4e-01 theta_g=8.1e-01 delta_b=5.4e-01 theta_b=9.5e-01
+[w3 30-60] adam   2999 loss 6.278e-04 (ode 5.89e-04, c00 3.92e-05) 779s
+[w3 30-60] lbfgs    999 loss 1.214e-04 1079s
+W3 slow=True p=1.0 k=0.003  phi=4.9e-03 delta_g=5.2e-03 theta_g=2.7e-03 delta_b=9.2e-03 theta_b=1.5e-02
+W3 slow=True p=1.0 k=0.03   phi=4.9e-03 delta_g=3.1e-03 theta_g=3.3e-03 delta_b=4.9e-03 theta_b=3.6e-02
+W3 slow=True p=1.0 k=0.06   phi=4.7e-03 delta_g=3.7e-03 theta_g=3.5e-02 delta_b=1.0e-02 theta_b=9.2e-02
+W3 slow=True p=1.0 k=0.09   phi=3.1e-02 delta_g=2.9e-02 theta_g=5.4e-02 delta_b=1.8e-02 theta_b=2.2e-02
+W3 slow=True p=1.0 k=0.12   phi=1.3e-01 delta_g=1.7e-01 theta_g=2.3e-01 delta_b=1.4e-01 theta_b=9.2e-02

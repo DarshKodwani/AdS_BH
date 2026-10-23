@@ -47,7 +47,7 @@ def build_windows(cfg, bg) -> list[Window]:
     tau_end = bg.tau0 * (1 - 1e-6)
     te, fe = cfg["tca_edges"], [float(x) for x in cfg["full_edges"]] + [tau_end]
     ws = [Window(tca, float(a), float(b), lk, **kw) for a, b in zip(te[:-1], te[1:])]
-    ws += [Window(full, a, b, lk, **kw) for a, b in zip(fe[:-1], fe[1:])]
+    ws += [Window(full, a, b, lk, slow_row=net.get("slow_row", False), **kw) for a, b in zip(fe[:-1], fe[1:])]
     n = cfg["rsa_windows"]
     ws += [ModeWindow(rsa, 1.0, tau_end, lk, tau_start=rsa_time(bg), frac_a=i / n, frac_b=(i + 1) / n,
                       max_start=0.98 * tau_end, **kw) for i in range(n)]
