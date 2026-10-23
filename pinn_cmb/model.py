@@ -87,6 +87,7 @@ class Window:
     width: int = 64
     depth: int = 4
     eps: float = 0.1
+    slow_row: bool = False  # replace the theta_b row by the unpreconditioned slow row (see residuals)
 
     @cached_property
     def L(self) -> float:
@@ -102,7 +103,7 @@ class Window:
 
     def __hash__(self):
         return hash((self.layout, self.tau_a, self.tau_b, self.log_k_range, self.n_cond, self.ansatz,
-                     self.width, self.depth, self.eps))
+                     self.width, self.depth, self.eps, self.slow_row))
 
     def init(self, key):
         return init_mlp(key, [2 + self.n_cond] + [self.width] * self.depth + [self.n_heads * self.layout.size])
@@ -174,7 +175,16 @@ class Window:
         u, du_dx = jax.jvp(lambda s: self.u(params, s, k, cond, u_a, bg), (x,), (jnp.ones_like(x),))
         tau = self.tau(x, k)
         f = eq.rhs(tau, u, k, bg, self.layout)
-        r = (du_dx / self.L_of(k) - tau * f) / (self.scale(tau, k, bg) * self.precond(tau, k, bg))
+        raw = du_dx / self.L_of(k) - tau * f
+        sc = self.scale(tau, k, bg)
+        r = raw / (sc * self.precond(tau, k, bg))
+        if self.slow_row and not self.layout.tca:
+            # Preconditioning divides both momentum rows by ~tau*kappa_dot, which also suppresses
+            # the acoustic dynamics they carry. theta_g + R theta_b has no Thomson term, so its
+            # row needs no preconditioning; it replaces the theta_b row.
+            ig, ib = self.layout.index["theta_g"], self.layout.index["theta_b"]
+            R = bgm.at(bg, tau).R
+            r = r.at[ib].set((raw[ig] + R * raw[ib]) / ((1.0 + R) * sc[ig]))
         c = eq.observables(tau, u, k, bg, self.layout)["constraint_00"]
         return r, c
 
