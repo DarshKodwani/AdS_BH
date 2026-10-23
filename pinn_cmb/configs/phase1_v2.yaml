@@ -1,0 +1,20 @@
+# Phase 1 v2: same problem as phase1.yaml with shorter windows, wider networks and a
+# longer L-BFGS polish (the v1 error was ~1e-3 already in the 7-e-fold first window).
+k_range: [1.0e-3, 0.05]
+tau_i: 1.0e-3
+window_edges: [1.0e-3, 0.03, 1.0, 5.0, 20.0, 60.0, 200.0]
+lmax_nu: 4
+network: {width: 96, depth: 4, ansatz: true}
+train:
+  adam_steps: 20000
+  lbfgs_steps: 8000
+  n_k: 64
+  n_t: 64
+  n_k_lbfgs: 64
+  n_t_lbfgs: 64
+  w_constraint: 1.0
+evaluation:
+  n_test_k: 20
+  seed: 123
+  tau_max: 200.0
+acceptance: {tolerance: 1.0e-3}
