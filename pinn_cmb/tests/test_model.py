@@ -96,3 +96,11 @@ def test_chain_ranges_route_low_k_through_full_hierarchy(bg):
     assert r_low[3][0] > r_low[3][1]  # low k never enters RSA (45/k > tau0)
     assert r_low[2] == (600.0, 14000.0)
     assert r_high[2] == (600.0, 900.0) and abs(r_high[4][1] - 14000.0) < 1e-6
+
+
+def test_all_starts_matches_per_window_start_states(bg):
+    ch = _late_chain(bg)
+    k, c = jnp.float64(0.05), jnp.zeros(0)
+    starts = ch.all_starts(k, c, bg)
+    for j in range(len(ch.windows)):
+        np.testing.assert_allclose(starts[j], ch.start_state(j, k, c, bg), rtol=1e-12, atol=1e-300)

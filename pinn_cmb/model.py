@@ -237,6 +237,36 @@ class Chain:
                 u = eq.switch_layout(w.tau_b, u, k, bg, w.layout, self.windows[i + 1].layout)
         return states, u
 
+    def _mode_start(self, j, k, cond, bg, fixed_states):
+        """Start of the first ModeWindow: the fixed chain at tau_start(k), mapped to its layout."""
+        w = self.windows[j]
+        fixed = [i for i in range(j) if not isinstance(self.windows[i], ModeWindow)]
+        ts = jnp.minimum(w.tau_start(k), 0.999 * w.tau_b)
+        src = self.windows[fixed[-1]].layout
+        cands, conds = [], []
+        for i in fixed:
+            wi = self.windows[i]
+            if wi.layout != src:
+                continue
+            x = jnp.clip(wi.x_of(ts), 0.0, 1.0)
+            cands.append(wi.u(self.params[i], x, k, cond, fixed_states[i], bg))
+            conds.append((ts >= wi.tau_a) & (ts <= wi.tau_b))
+        u = jnp.select(conds, cands, default=cands[-1])
+        return eq.switch_layout(ts, u, k, bg, src, w.layout)
+
+    def all_starts(self, k, cond, bg) -> list:
+        """Start states of every window in one time-marching pass."""
+        n_fixed = sum(not isinstance(w, ModeWindow) for w in self.windows)
+        starts, _ = self._fixed_states(n_fixed, k, cond, bg)
+        for j in range(n_fixed, len(self.windows)):
+            w = self.windows[j]
+            if w.frac_a == 0:
+                starts.append(self._mode_start(j, k, cond, bg, starts))
+            else:
+                prev = self.windows[j - 1]
+                starts.append(prev.u(self.params[j - 1], jnp.float64(1.0), k, cond, starts[j - 1], bg))
+        return starts
+
     def start_state(self, j, k, cond, bg):
         """Exact start state of window j: the adiabatic IC, or the previous window's end state.
 
@@ -251,18 +281,7 @@ class Chain:
             return prev.u(self.params[j - 1], jnp.float64(1.0), k, cond, self.start_state(j - 1, k, cond, bg), bg)
         fixed = [i for i in range(j) if not isinstance(self.windows[i], ModeWindow)]
         states, _ = self._fixed_states(len(fixed), k, cond, bg)
-        ts = jnp.minimum(w.tau_start(k), 0.999 * w.tau_b)
-        src = self.windows[fixed[-1]].layout
-        cands, conds = [], []
-        for i in fixed:
-            wi = self.windows[i]
-            if wi.layout != src:
-                continue
-            x = jnp.clip(wi.x_of(ts), 0.0, 1.0)
-            cands.append(wi.u(self.params[i], x, k, cond, states[i], bg))
-            conds.append((ts >= wi.tau_a) & (ts <= wi.tau_b))
-        u = jnp.select(conds, cands, default=cands[-1])
-        return eq.switch_layout(ts, u, k, bg, src, w.layout)
+        return self._mode_start(j, k, cond, bg, states)
 
     def state(self, tau: float, k, cond, bg):
         """(window, state vector) at a concrete scalar tau for a concrete k."""
@@ -289,35 +308,54 @@ class Chain:
                 out.append((w.tau_a, w.tau_b))
         return out
 
-    def observables(self, taus: np.ndarray, k, cond, bg) -> dict:
-        """Observables along an increasing tau grid (one vmapped call per window)."""
-        out: dict[str, list] = {}
-        rng = self.ranges(k)
-        last_b = max(b for a, b in rng)
-        for j, w in enumerate(self.windows):
-            a, b = rng[j]
-            sel = (taus >= a) & ((taus < b) | ((b == last_b) & (taus <= b)))
-            if not sel.any():
-                continue
-            u_a = self.start_state(j, k, cond, bg)
-            t = jnp.asarray(taus[sel])
-            uu = jax.vmap(lambda s: w.u(self.params[j], w.x_of(s, k), k, cond, u_a, bg))(t)
-            o = jax.vmap(lambda tt, yy: eq.observables(tt, yy, k, bg, w.layout))(t, uu)
-            for n, v in o.items():
-                out.setdefault(n, []).append(np.asarray(v))
-        return {n: np.concatenate(v) for n, v in out.items()}
+    def states(self, taus: np.ndarray, k, cond, bg) -> list[tuple[eq.Layout, np.ndarray, jax.Array, jax.Array]]:
+        """(layout, selection mask, clipped taus, states) per window on an increasing tau grid.
 
-    def states(self, taus: np.ndarray, k, cond, bg) -> list[tuple[eq.Layout, np.ndarray, jax.Array]]:
-        """Raw (layout, taus, states) per window, for source functions."""
+        Every window is evaluated on the full grid clipped to its range, so array shapes do not
+        depend on k and the JIT-compiled functions are reused; callers keep the masked samples.
+        """
         res = []
         rng = self.ranges(k)
         last_b = max(b for a, b in rng)
+        starts = _jit_starts(tuple(self.windows), self.tau_i)(self.params, k, cond, bg)
         for j, w in enumerate(self.windows):
             a, b = rng[j]
             sel = (taus >= a) & ((taus < b) | ((b == last_b) & (taus <= b)))
             if not sel.any():
                 continue
-            u_a = self.start_state(j, k, cond, bg)
-            t = jnp.asarray(taus[sel])
-            res.append((w.layout, sel, jax.vmap(lambda s: w.u(self.params[j], w.x_of(s, k), k, cond, u_a, bg))(t)))
+            t = jnp.asarray(np.clip(taus, a, b))
+            res.append((w.layout, sel, t, _jit_eval(w)(self.params[j], starts[j], k, cond, t, bg)))
         return res
+
+    def observables(self, taus: np.ndarray, k, cond, bg) -> dict:
+        """Observables along an increasing tau grid."""
+        out: dict[str, list] = {}
+        for layout, sel, t, uu in self.states(taus, k, cond, bg):
+            o = _jit_obs(layout)(t, uu, k, bg)
+            for n, v in o.items():
+                out.setdefault(n, []).append(np.asarray(v)[sel])
+        return {n: np.concatenate(v) for n, v in out.items()}
+
+
+_CACHE: dict = {}
+
+
+def _jit_starts(windows: tuple, tau_i: float):
+    key = ("starts", windows, tau_i)
+    if key not in _CACHE:
+        _CACHE[key] = jax.jit(lambda params, k, cond, bg: Chain(list(windows), params, tau_i).all_starts(k, cond, bg))
+    return _CACHE[key]
+
+
+def _jit_eval(w: Window):
+    key = ("eval", w)
+    if key not in _CACHE:
+        _CACHE[key] = jax.jit(lambda p, u_a, k, cond, t, bg: jax.vmap(lambda s: w.u(p, w.x_of(s, k), k, cond, u_a, bg))(t))
+    return _CACHE[key]
+
+
+def _jit_obs(layout: eq.Layout):
+    key = ("obs", layout)
+    if key not in _CACHE:
+        _CACHE[key] = jax.jit(jax.vmap(lambda t, y, k, bg: eq.observables(t, y, k, bg, layout), (0, 0, None, None)))
+    return _CACHE[key]

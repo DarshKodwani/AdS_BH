@@ -144,12 +144,12 @@ def pinn_sources(chain: Chain, bg, k_src, tau_grid, C=0.5):
     src = {}
     for i, k in enumerate(k_src):
         kj = jnp.float64(k)
-        for layout, sel, states in chain.states(tau_grid, kj, jnp.zeros(0), bg):
+        for layout, sel, t, states in chain.states(tau_grid, kj, jnp.zeros(0), bg):
             if layout not in src:
                 src[layout] = jax.jit(jax.vmap(lambda t, y, kk, L=layout: los.sources(t, y, kk, bg, L), (0, 0, None)))
-            vals = src[layout](jnp.asarray(tau_grid[sel]), states, kj)
+            vals = src[layout](t, states, kj)
             for n in S:
-                S[n][i, sel] = C * np.asarray(vals[n])
+                S[n][i, sel] = C * np.asarray(vals[n])[sel]
     return S
 
 
