@@ -151,6 +151,54 @@ def solve(
     return ReferenceSolution(k=k, tau=tau, values=values, tau_switch=tau_switch, stats={"nfev": nfev})
 
 
+def solve_segments(
+    k: float,
+    bg: bgm.Background,
+    tau_eval: np.ndarray,
+    segments: list[tuple[eq.Layout, float]],
+    *,
+    tau_i: float | None = None,
+    C: float = 1.0,
+    rtol: float = 1e-8,
+    atol: float = 1e-11,
+    extra: callable = None,
+) -> ReferenceSolution:
+    """Integrate through a sequence of (layout, tau_end) segments, switching with eq.switch_layout.
+
+    `extra(tau, y, layout) -> dict` adds per-sample outputs (e.g. source functions); it is
+    vmapped over the samples of each segment.
+    """
+    tau_eval = np.asarray(tau_eval, dtype=float)
+    tau_i = ics.default_tau_i(k, bg) if tau_i is None else tau_i
+    kj = jnp.float64(k)
+    y = ics.initial_state(kj, tau_i, bg, segments[0][0], C)
+    t0, nfev, values, taus = tau_i, 0, {}, []
+    for j, (layout, t1) in enumerate(segments):
+        last = j == len(segments) - 1
+        sel = (tau_eval >= t0) & (tau_eval < t1)
+        sol = _integrate(layout, kj, bg, y, t0, t1, np.append(tau_eval[sel], t1), rtol, atol)
+        nfev += sol.nfev
+        keep_end = last and np.any(tau_eval == t1)  # t1 itself requested: keep the appended sample
+        n_out = sol.t.size if keep_end else sol.t.size - 1
+        t_out, y_out = jnp.asarray(sol.t[:n_out]), jnp.asarray(sol.y[:, :n_out].T)
+        if t_out.shape[0]:
+            _, _, obs = _compiled(layout)
+            out = dict(obs(t_out, y_out, kj, bg))
+            if extra is not None:
+                out.update(jax.vmap(lambda t, yy: extra(t, yy, layout))(t_out, y_out))
+            for name, v in out.items():
+                values.setdefault(name, []).append(np.asarray(v))
+            taus.append(np.asarray(t_out))
+        if not last:
+            y = _switch(jnp.float64(t1), jnp.asarray(sol.y[:, -1]), kj, bg, layout, segments[j + 1][0])
+        t0 = t1
+    values = {n: np.concatenate(v) for n, v in values.items()}
+    return ReferenceSolution(k=k, tau=np.concatenate(taus), values=values, tau_switch=None, stats={"nfev": nfev})
+
+
+_switch = jax.jit(eq.switch_layout, static_argnums=(4, 5))
+
+
 def _drop_last(sol):
     """Remove the extra sample at tau_switch that was only needed to hand over the state."""
     sol.t, sol.y = sol.t[:-1], sol.y[:, :-1]

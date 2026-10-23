@@ -1,0 +1,22 @@
+# Phase 2: tight-coupled bundle over (k, omega_b, omega_c), analytic background.
+k_range: [1.0e-3, 0.2]
+omega_b: [0.020, 0.024]
+omega_c: [0.10, 0.14]
+tau_i: 1.0e-3
+window_edges: [1.0e-3, 1.0, 5.0, 20.0, 50.0, 100.0, 200.0]
+tau_max: 200.0                   # spec domain, capped per mode at its TCA switch
+train_margin: 1.25               # train each mode to 1.25 x its fiducial switch time
+lmax_nu: 4
+network: {width: 96, depth: 4, ansatz: true}
+train:
+  adam_steps: 20000
+  lbfgs_steps: 6000
+  n_k: 64
+  n_t: 64
+  n_k_lbfgs: 64
+  n_t_lbfgs: 64
+  w_constraint: 1.0
+evaluation:
+  n_test: 30                     # held-out Latin hypercube in (ln k, omega_b, omega_c)
+  seed: 321
+acceptance: {tolerance: 1.0e-3}

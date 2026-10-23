@@ -1,0 +1,19 @@
+# Phase 1: tight-coupled k-bundle, fiducial cosmology.
+k_range: [1.0e-3, 0.05]          # 1/Mpc
+tau_i: 1.0e-3                     # common start time (k tau_i <= 5e-5)
+window_edges: [1.0e-3, 1.0, 20.0, 200.0]   # Mpc; k tau = 1 at tau = 20 for k_max
+lmax_nu: 4
+network: {width: 64, depth: 4, ansatz: true}
+train:
+  adam_steps: 20000
+  lbfgs_steps: 6000
+  n_k: 64
+  n_t: 64
+  n_k_lbfgs: 64
+  n_t_lbfgs: 64
+  w_constraint: 1.0
+evaluation:
+  n_test_k: 20
+  seed: 123
+  tau_max: 200.0                  # capped per k at the CLASS-default TCA switch (spec Rev 2)
+acceptance: {tolerance: 1.0e-3}

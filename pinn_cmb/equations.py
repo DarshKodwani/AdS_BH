@@ -39,8 +39,13 @@ class Layout:
     lmax_g: int = 0
     lmax_pol: int = 0
     lmax_nu: int = 4
+    rsa: bool = False  # radiation streaming approximation: matter + metric only (CLASS II §4)
 
     def __post_init__(self):
+        if self.rsa:
+            if self.tca:
+                raise ValueError("rsa and tca are exclusive")
+            return
         if self.lmax_nu < 3:
             raise ValueError("lmax_nu must be >= 3")
         if not self.tca and (self.lmax_g < 3 or self.lmax_pol < 3):
@@ -48,6 +53,8 @@ class Layout:
 
     @cached_property
     def names(self) -> tuple[str, ...]:
+        if self.rsa:
+            return ("phi", "delta_c", "theta_c", "delta_b", "theta_b")
         nu = ("delta_nu", "theta_nu") + tuple(f"F_nu{l}" for l in range(2, self.lmax_nu + 1))
         if self.tca:
             return ("phi", "delta_c", "theta_c", "delta_b", "delta_g", "theta_gb") + nu
@@ -175,6 +182,8 @@ def unpack(y, layout: Layout) -> dict:
     """Named view of a state vector; hierarchies are returned as arrays."""
     ix = layout.index
     out = {n: y[i] for n, i in ix.items() if not n.startswith(("F_", "G_"))}
+    if layout.rsa:
+        return out
     out["F_nu"] = y[layout.block("F_nu")]
     if not layout.tca:
         out["F_g"] = y[layout.block("F_g")]
@@ -182,8 +191,26 @@ def unpack(y, layout: Layout) -> dict:
     return out
 
 
+def _metric_rsa(tau, y, k, bg, layout):
+    """RSA in Newtonian gauge, exactly as CLASS (perturbations_einstein + rsa_delta_and_theta).
+
+    No shear, so psi = phi. phi' comes from the 0i equation with the matter velocities only,
+    then the radiation follows the metric: delta_g = delta_nu = -4 phi,
+    theta_g = theta_nu = 6 phi'. No reionisation term (rsa_MD).
+    """
+    b = bgm.at(bg, tau)
+    s = unpack(y, layout)
+    psi = s["phi"]
+    phi_dot = phi_dot_from_0i(k, b, psi, b.rho_c * s["theta_c"] + b.rho_b * s["theta_b"])
+    s.update(delta_g=-4.0 * s["phi"], delta_nu=-4.0 * s["phi"], theta_g=6.0 * phi_dot, theta_nu=6.0 * phi_dot)
+    delta_rho = b.rho_c * s["delta_c"] + b.rho_b * s["delta_b"] + (b.rho_g + b.rho_nu) * s["delta_g"]
+    return b, s, psi, phi_dot, delta_rho
+
+
 def metric(tau, y, k, bg: bgm.Background, layout: Layout):
     """Background at tau plus (psi, phi', delta rho) implied by the state."""
+    if layout.rsa:
+        return _metric_rsa(tau, y, k, bg, layout)
     b = bgm.at(bg, tau)
     s = unpack(y, layout)
     sigma_nu = 0.5 * s["F_nu"][0]
@@ -210,6 +237,9 @@ def rhs(tau, y, k, bg: bgm.Background, layout: Layout):
     """dy/dtau for either layout (TCA or full hierarchy)."""
     b, s, psi, phi_dot, _ = metric(tau, y, k, bg, layout)
     dc = cdm_rhs(k, b, s["delta_c"], s["theta_c"], phi_dot, psi)
+    if layout.rsa:
+        db = baryon_rhs(k, b, s["delta_b"], s["theta_b"], s["theta_g"], phi_dot, psi)
+        return jnp.stack([phi_dot, dc[0], dc[1], db[0], db[1]])
     dnu = neutrino_rhs(k, tau, s["delta_nu"], s["theta_nu"], s["F_nu"], phi_dot, psi)
     if layout.tca:
         theta = s["theta_gb"]
@@ -231,11 +261,15 @@ def rhs(tau, y, k, bg: bgm.Background, layout: Layout):
 def observables(tau, y, k, bg: bgm.Background, layout: Layout) -> dict:
     """Physical variables (CLASS naming where possible) plus the 00-constraint residual."""
     b, s, psi, phi_dot, delta_rho = metric(tau, y, k, bg, layout)
+    zero = jnp.zeros_like(s["phi"])
     if layout.tca:
         theta_b = theta_g = s["theta_gb"]
-        shear_g = jnp.zeros_like(theta_g)
+        shear_g = pol = zero
+    elif layout.rsa:
+        theta_b, theta_g, shear_g, pol = s["theta_b"], s["theta_g"], zero, zero
     else:
         theta_b, theta_g, shear_g = s["theta_b"], s["theta_g"], 0.5 * s["F_g"][0]
+        pol = s["F_g"][0] + s["G_g"][0] + s["G_g"][2]  # Pi = F_2 + G_0 + G_2
     return {
         "phi": s["phi"],
         "psi": psi,
@@ -249,9 +283,21 @@ def observables(tau, y, k, bg: bgm.Background, layout: Layout) -> dict:
         "shear_g": shear_g,
         "delta_nu": s["delta_nu"],
         "theta_nu": s["theta_nu"],
-        "shear_nu": 0.5 * s["F_nu"][0],
+        "shear_nu": zero if layout.rsa else 0.5 * s["F_nu"][0],
+        "Pi": pol,
         "constraint_00": constraint_00(k, b, s["phi"], phi_dot, psi, delta_rho),
     }
+
+
+def switch_layout(tau, y, k, bg: bgm.Background, src: Layout, dst: Layout):
+    """Map a state between layouts at a switch time (TCA -> full, full -> RSA)."""
+    if src == dst:
+        return y
+    if src.tca and not dst.tca and not dst.rsa:
+        return tca_to_full(tau, y, k, bg, src, dst)
+    if dst.rsa and not src.tca:
+        return jnp.stack([y[src.index[n]] for n in dst.names])
+    raise ValueError(f"no layout switch from {src} to {dst}")
 
 
 def tca_to_full(tau, y_tca, k, bg: bgm.Background, tca: Layout, full: Layout):

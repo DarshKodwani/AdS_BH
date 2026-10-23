@@ -62,6 +62,9 @@ class Background(NamedTuple):
     tau_min: float  # lower edge of the tables
     tau0: float  # conformal age
     tau_rec: float  # CLASS's tau at the visibility maximum
+    vis: Spline | None = None  # visibility g = kappa' e^-kappa [1/Mpc] vs ln tau (CLASS table)
+    exp_m_kappa: Spline | None = None  # e^-kappa vs ln tau (CLASS table)
+    tau_free_streaming: float = 0.0  # CLASS: first tau with 1/(kappa' tau) > 5 (RSA trigger)
 
 
 class BgAt(NamedTuple):
@@ -76,7 +79,73 @@ class BgAt(NamedTuple):
     R: jax.Array  # 3 rho_b / (4 rho_g)
 
 
+C_KM_S = 299792.458
+H100_MPC = 100.0 / C_KM_S  # H0 / h in 1/Mpc
+
+
+class AnalyticBackground(NamedTuple):
+    """Radiation + matter background, analytic in tau and differentiable in (omega_b, omega_c).
+
+    For tau before recombination only (Lambda is ~1e-9 of rho there). Friedmann
+    (a')^2 = rho_r0 + rho_m0 a gives a(tau) = sqrt(rho_r0) tau + rho_m0 tau^2 / 4 exactly.
+    c_b^2 ∝ 1/a (T_b = T_gamma). kappa' and the Silk scale are the fiducial CLASS tables in
+    ln a, scaled by omega_b / omega_b,fid (n_e ∝ omega_b); they only enter the TCA switch
+    time and the ansatz envelope, never the TCA equations themselves.
+    """
+
+    rho0: jax.Array  # [cdm, b, g, ur, lambda=0]
+    cb2_a: jax.Array  # c_b^2 * a (constant while T_b = T_gamma)
+    ln_kappa_a: Spline  # fiducial ln kappa' vs ln a
+    ln_kd2inv_a: Spline  # fiducial ln k_D^-2 vs ln a
+    omega_b_ratio: jax.Array
+
+
+def analytic_background(bg_fid: Background, omega_b, omega_c, h: float = FIDUCIAL["h"]) -> AnalyticBackground:
+    """Analytic background for (omega_b, omega_c), sharing radiation and thermal tables with bg_fid."""
+    lnt = jnp.linspace(jnp.log(2 * bg_fid.tau_min), jnp.log(0.8 * bg_fid.tau_rec), 2000)
+    b = jax.vmap(lambda t: at(bg_fid, t))(jnp.exp(lnt))
+    lna = np.log(np.asarray(b.a))
+    s_kappa = make_spline(lna, np.log(np.asarray(b.kappa_dot)))
+    s_kd = make_spline(lna, np.asarray(spline_eval(bg_fid.ln_kd2inv, lnt)))
+    ob_fid = float(bg_fid.rho0[1]) / H100_MPC**2
+    return AnalyticBackground(
+        rho0=jnp.stack([omega_c * H100_MPC**2, omega_b * H100_MPC**2, bg_fid.rho0[2], bg_fid.rho0[3], 0.0 * omega_b]),
+        cb2_a=jnp.asarray(np.median(np.asarray(b.cb2 * b.a)[:200])),
+        ln_kappa_a=s_kappa,
+        ln_kd2inv_a=s_kd,
+        omega_b_ratio=omega_b / ob_fid,
+    )
+
+
+def with_params(abg: AnalyticBackground, omega_b, omega_c) -> AnalyticBackground:
+    """Same tables, new (omega_b, omega_c): cheap and differentiable (used inside the loss)."""
+    ob_fid = abg.rho0[1] / (H100_MPC**2 * abg.omega_b_ratio)
+    return abg._replace(rho0=abg.rho0.at[0].set(omega_c * H100_MPC**2).at[1].set(omega_b * H100_MPC**2),
+                        omega_b_ratio=omega_b / ob_fid)
+
+
+def _at_analytic(bg: AnalyticBackground, tau) -> BgAt:
+    rho_r0 = bg.rho0[2] + bg.rho0[3]
+    rho_m0 = bg.rho0[0] + bg.rho0[1]
+    a = jnp.sqrt(rho_r0) * tau + 0.25 * rho_m0 * tau**2
+    a_dot = jnp.sqrt(rho_r0) + 0.5 * rho_m0 * tau
+    lna = jnp.log(a)
+    return BgAt(
+        a=a,
+        conf_H=a_dot / a,
+        rho_c=bg.rho0[0] / a**3,
+        rho_b=bg.rho0[1] / a**3,
+        rho_g=bg.rho0[2] / a**4,
+        rho_nu=bg.rho0[3] / a**4,
+        kappa_dot=bg.omega_b_ratio * jnp.exp(spline_eval(bg.ln_kappa_a, lna)),
+        cb2=bg.cb2_a / a,
+        R=0.75 * bg.rho0[1] / bg.rho0[2] * a,
+    )
+
+
 def at(bg: Background, tau: jax.Array) -> BgAt:
+    if isinstance(bg, AnalyticBackground):
+        return _at_analytic(bg, tau)
     x = jnp.log(tau)
     a = jnp.exp(spline_eval(bg.lna, x))
     rho_c = bg.rho0[0] / a**3
@@ -98,11 +167,27 @@ def at(bg: Background, tau: jax.Array) -> BgAt:
 
 
 def sound_horizon(bg: Background, tau: jax.Array) -> jax.Array:
+    if isinstance(bg, AnalyticBackground):
+        # r_s = int da / sqrt(3 (1 + c a)(A + B a)), c = R/a, A = rho_r0, B = rho_m0 (closed form)
+        A, B = bg.rho0[2] + bg.rho0[3], bg.rho0[0] + bg.rho0[1]
+        c = 0.75 * bg.rho0[1] / bg.rho0[2]
+        a = _at_analytic(bg, tau).a
+        F = lambda aa: jnp.log(jnp.sqrt(c * (A + B * aa)) + jnp.sqrt(B * (1.0 + c * aa)))
+        return 2.0 / jnp.sqrt(3.0 * c * B) * (F(a) - F(0.0))
     return spline_eval(bg.rs, jnp.log(tau))
 
 
 def damping_wavenumber(bg: Background, tau: jax.Array) -> jax.Array:
+    if isinstance(bg, AnalyticBackground):
+        lna = jnp.log(_at_analytic(bg, tau).a)
+        return jnp.exp(-0.5 * spline_eval(bg.ln_kd2inv_a, lna)) * jnp.sqrt(bg.omega_b_ratio)
     return jnp.exp(-0.5 * spline_eval(bg.ln_kd2inv, jnp.log(tau)))
+
+
+def visibility(bg: Background, tau: jax.Array) -> tuple[jax.Array, jax.Array]:
+    """(g, e^-kappa) at tau; g' follows by autodiff."""
+    x = jnp.log(tau)
+    return spline_eval(bg.vis, x), spline_eval(bg.exp_m_kappa, x)
 
 
 def class_base_settings(params: dict | None = None) -> dict:
@@ -145,7 +230,10 @@ def build_background(params: dict | None = None, tau_min: float = 1e-5) -> Backg
 
     # Thermodynamics: CLASS tables start near z ~ 1e6-1e7. Earlier, hydrogen and helium are
     # fully ionised, so n_e ∝ a^-3 (kappa' ∝ a^-2) and T_b = T_gamma (c_b^2 ∝ a^-1).
-    tau_t, kd_t, cb2_t = _sorted_unique(th["conf. time [Mpc]"], th["kappa' [Mpc^-1]"], th["c_b^2"])
+    tau_t, kd_t, cb2_t, g_t, emk_t = _sorted_unique(
+        th["conf. time [Mpc]"], th["kappa' [Mpc^-1]"], th["c_b^2"], th["g [Mpc^-1]"], th["exp(-kappa)"])
+    fs = np.nonzero(1.0 / (kd_t * tau_t) > 5.0)[0]
+    tau_fs = float(tau_t[fs[0]]) if fs.size else float(tau_t[-1])
     lntau_ext = np.linspace(np.log(0.5 * tau_min), np.log(tau_t[0]), 400)[:-1]
     a_ext = np.exp(np.asarray(spline_eval(lna, jnp.asarray(lntau_ext))))
     a_t0 = float(jnp.exp(spline_eval(lna, jnp.log(tau_t[0]))))
@@ -178,4 +266,7 @@ def build_background(params: dict | None = None, tau_min: float = 1e-5) -> Backg
         tau_min=float(tau_min),
         tau0=tau0,
         tau_rec=float(derived["tau_rec"]),
+        vis=make_spline(np.log(tau_t), g_t),
+        exp_m_kappa=make_spline(np.log(tau_t), emk_t),
+        tau_free_streaming=tau_fs,
     )
