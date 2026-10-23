@@ -61,11 +61,12 @@ def mlp(params, x):
 
 
 class Problem:
-    def __init__(self, bg, k, tau_max, ansatz="none", eps=0.1):
+    def __init__(self, bg, k, tau_max, ansatz="none", eps=0.1, tau_start=None, u_start=None):
+        """tau_start / u_start start the window elsewhere (time-marching); default is the adiabatic IC."""
         self.bg, self.k, self.tau_max, self.ansatz = bg, k, tau_max, ansatz
-        self.tau_i = ics.default_tau_i(k, bg)
+        self.tau_i = ics.default_tau_i(k, bg) if tau_start is None else tau_start
         self.L = float(np.log(tau_max / self.tau_i))
-        self.u0 = ics.initial_state(k, self.tau_i, bg, LAYOUT)
+        self.u0 = ics.initial_state(k, self.tau_i, bg, LAYOUT) if u_start is None else u_start
         self.psi0 = 20.0 / (15.0 + 4.0 * float(ics.r_nu(bg)))
         # Power of the super-horizon growth of each variable: theta ∝ k^2 tau, F_l ∝ (k tau)^l.
         power = {n: 0 for n in LAYOUT.names}
