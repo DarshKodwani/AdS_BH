@@ -34,7 +34,15 @@ A three-window chain (edges $10^{-3}$, 1, 20, 200\,Mpc; 4$\times$64 networks wit
 \end{figure*}
 
 \subsection{Phase 2: cosmological-parameter bundle}\label{sec:phase2}
-\pending{bundle over $(k,\omega_b,\omega_c)\in[10^{-3},0.2]\times[0.020,0.024]\times[0.10,0.14]$ on the analytic background; held-out Latin hypercube of 30 points.}
+A six-window chain (edges $10^{-3}$, 1, 5, 20, 50, 100, 200\,Mpc; 4$\times$96 networks with the oscillation ansatz and $(\omega_b,\omega_c)$ as extra inputs; 20k Adam + 6k L-BFGS steps per window) was trained over $(k,\omega_b,\omega_c)\in[10^{-3},0.2]\,{\rm Mpc}^{-1}\times[0.020,0.024]\times[0.10,0.14]$ on the analytic background. Each mode is trained to $1.25$ times its fiducial TCA switch time. Final window losses rise from $6\times10^{-7}$ in the first window to $4\times10^{-5}$ in the last. The chain was evaluated on a held-out Latin hypercube of 30 points, each up to its own switch time, against the reference solver on the same background. The RMS error over points is $(5$--$13)\times10^{-3}$ across the variables, and the maxima are $(1.4$--$6.3)\times10^{-2}$. The largest error is in $\delta_b$ at $k=0.2$\,Mpc$^{-1}$ and $\omega_c=0.136$. Phase~2 therefore misses its $10^{-3}$ target by an order of magnitude, and does worse than the $k$-only bundle of Phase~1.
+
+The errors are largest at the edges of the parameter box (Fig.~\ref{fig:phase2}, left). At $k=1.1\times10^{-3}$, the error in $\phi$ is $4\times10^{-3}$ already in the first, super-horizon window at $\omega_c=0.138$, but only $1\times10^{-3}$ at $(\omega_b,\omega_c)=(0.022,0.12)$. The error therefore comes from uneven fit quality across the conditioning inputs, not from error accumulating along the chain. The bundle loss is an average over the box, so the corners are fitted worst. The constraint residual tracks the error: over the 30 test points, the correlation between $\log\max_\tau|C_{00}|$ and the log of the maximum error is $0.74$ (Fig.~\ref{fig:phase2}, right). The worst point, at $k=0.2$\,Mpc$^{-1}$, also has the largest residual ($|C_{00}|=0.11$). $C_{00}$ is never used as a training target at test points, so it is a usable, label-free indicator of where a bundle cannot be trusted. Training more points near the box edges, or weighting the loss by the local residual, are the natural next steps.
+
+\begin{figure*}
+\includegraphics[width=0.8\textwidth]{figures/phase2.png}
+\caption{Phase 2 bundle over $(k,\omega_b,\omega_c)$: maximum relative error over variables at 30 held-out points (left), and the same error against the maximum Einstein-$00$ residual along each trajectory (right). Colour: $\omega_c$. Dashed: the $10^{-3}$ target.}
+\label{fig:phase2}
+\end{figure*}
 
 \subsection{Phase 3: through recombination}\label{sec:phase3}
 \pending{25-window chain (3 TCA, 19 full-hierarchy with $\ell_{\max}=12/10/17$, 3 per-mode RSA) over $k\in[5\times10^{-6},0.12]$\,Mpc$^{-1}$; errors against \textsc{class} up to $2\taurec$.}
