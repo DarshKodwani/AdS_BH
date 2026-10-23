@@ -3,3 +3,5 @@ __pycache__/
 .venv/
 results/*/nohup.log
 results/*/train.log
+results/*/partial_w*.npz
+results/*/*.tmp.npz

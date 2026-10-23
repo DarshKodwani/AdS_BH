@@ -147,7 +147,7 @@ def main():
         hf.write_text(json.dumps((json.loads(hf.read_text()) if hf.exists() else []) + [hists[-1]], indent=1))
 
     if not args.eval_only:
-        chain, _ = tr.train_chain(windows, P.bg, tcfg, cfg["tau_i"], log=log, chain=chain, on_window=on_window,
+        chain, _ = tr.train_chain(windows, P.bg, tcfg, cfg["tau_i"], log=log, chain=chain, on_window=on_window, partial_dir=args.out,
                                   tau_cap=make_tau_cap(P, cfg))
     report(evaluate(chain, P, cfg, windows[0].layout), cfg, args.out)
 

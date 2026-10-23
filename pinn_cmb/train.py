@@ -12,8 +12,11 @@ state of each mode comes from the frozen earlier windows of the chain.
 
 from __future__ import annotations
 
+import json
+import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 import jax
@@ -36,6 +39,7 @@ class TrainConfig:
     w_constraint: float = 1.0
     seed: int = 0
     log_every: int = 2000
+    ckpt_every: int = 250
 
 
 def stratified(key, n):
@@ -87,11 +91,30 @@ def start_states(chain: Chain, j: int, k, cond, bg_fn):
     return jax.vmap(lambda kk, cc: chain.start_state(j, kk, cc, bg_fn(cc)))(k, cond)
 
 
+def _save_partial(path, phase, step, key, params, state, hist):
+    """Atomically write an intra-window checkpoint (params and optimiser state as flat leaves)."""
+    leaves = jax.tree_util.tree_leaves((params, state))
+    tmp = str(path) + ".tmp.npz"
+    np.savez(tmp, phase=phase, step=step, key=np.asarray(key), hist=json.dumps(hist),
+             **{f"leaf{i}": np.asarray(x) for i, x in enumerate(leaves)})
+    os.replace(tmp, path)
+
+
+def _load_partial(path, params, state):
+    d = np.load(path)
+    treedef = jax.tree_util.tree_structure((params, state))
+    leaves = [jnp.asarray(d[f"leaf{i}"]) for i in range(treedef.num_leaves)]
+    p, s = jax.tree_util.tree_unflatten(treedef, leaves)
+    return str(d["phase"]), int(d["step"]), jnp.asarray(d["key"]), p, s, json.loads(str(d["hist"]))
+
+
 def train_window(w: Window, chain: Chain, bg_fn: Callable, cfg: TrainConfig, log=print, tag="",
-                 tau_cap: Callable | None = None) -> tuple[list, dict]:
+                 tau_cap: Callable | None = None, partial: Path | None = None) -> tuple[list, dict]:
     """Train window number len(chain.windows) given the frozen chain; returns (params, history).
 
     tau_cap(k, cond) -> tau, if given, ends each mode's training range there.
+    partial, if given, is an intra-window checkpoint file written every cfg.ckpt_every steps
+    and resumed from, so a restart loses minutes rather than the whole window.
     """
     j = len(chain.windows)
     chain_with = Chain(chain.windows + [w], chain.params + [None], chain.tau_i)
@@ -116,12 +139,22 @@ def train_window(w: Window, chain: Chain, bg_fn: Callable, cfg: TrainConfig, log
 
     hist = {"adam": [], "lbfgs": []}
     t0 = time.time()
-    for i in range(cfg.adam_steps):
-        key, sub = jax.random.split(key)
-        params, state, l, (rr, cc) = adam_step(params, state, sub)
-        if i % cfg.log_every == 0 or i == cfg.adam_steps - 1:
-            hist["adam"].append((i, float(l), float(rr), float(cc)))
-            log(f"{tag} adam {i:6d} loss {float(l):.3e} (ode {float(rr):.2e}, c00 {float(cc):.2e}) {time.time()-t0:.0f}s")
+    phase, start = "adam", 0
+    if partial is not None and Path(partial).exists():
+        phase, start, key, params, saved_state, hist = _load_partial(partial, params, state)
+        if phase == "adam":
+            state = saved_state
+        log(f"{tag} resumed {phase} at step {start}")
+    if phase == "adam":
+        for i in range(start, cfg.adam_steps):
+            key, sub = jax.random.split(key)
+            params, state, l, (rr, cc) = adam_step(params, state, sub)
+            if i % cfg.log_every == 0 or i == cfg.adam_steps - 1:
+                hist["adam"].append((i, float(l), float(rr), float(cc)))
+                log(f"{tag} adam {i:6d} loss {float(l):.3e} (ode {float(rr):.2e}, c00 {float(cc):.2e}) {time.time()-t0:.0f}s")
+            if partial is not None and (i + 1) % cfg.ckpt_every == 0:
+                _save_partial(partial, "adam", i + 1, key, params, state, hist)
+        start = 0
 
     # L-BFGS on a fixed, denser collocation set.
     kk, cond = sample_modes(jax.random.PRNGKey(cfg.seed + 7 + 1000 * j), cfg.n_k_lbfgs, w.log_k_range, w.n_cond)
@@ -129,7 +162,7 @@ def train_window(w: Window, chain: Chain, bg_fn: Callable, cfg: TrainConfig, log
     u_a = u0_fn(kk, cond)
     f = lambda p: loss(p, kk, cond, xs, u_a, wt)[0]
     lb = optax.lbfgs()
-    lstate = lb.init(params)
+    lstate = lb.init(params)  # L-BFGS memory is not checkpointed: a resume rebuilds it from the saved params
     vg = optax.value_and_grad_from_state(f)
 
     @jax.jit
@@ -138,32 +171,38 @@ def train_window(w: Window, chain: Chain, bg_fn: Callable, cfg: TrainConfig, log
         upd, lstate = lb.update(g, lstate, params, value=l, grad=g, value_fn=f)
         return optax.apply_updates(params, upd), lstate, l
 
-    for i in range(cfg.lbfgs_steps):
+    for i in range(start, cfg.lbfgs_steps):
         params, lstate, l = lbfgs_step(params, lstate)
         if i % cfg.log_every == 0 or i == cfg.lbfgs_steps - 1:
             hist["lbfgs"].append((i, float(l)))
             log(f"{tag} lbfgs {i:6d} loss {float(l):.3e} {time.time()-t0:.0f}s")
+        if partial is not None and (i + 1) % cfg.ckpt_every == 0:
+            _save_partial(partial, "lbfgs", i + 1, key, params, state, hist)
     hist["seconds"] = time.time() - t0
     return params, hist
 
 
 def train_chain(windows: list[Window], bg_fn: Callable, cfg: TrainConfig, tau_i: float,
                 log=print, chain: Chain | None = None, on_window=None, tau_cap=None,
-                cfgs: list[TrainConfig] | None = None) -> tuple[Chain, list]:
+                cfgs: list[TrainConfig] | None = None, partial_dir: Path | None = None) -> tuple[Chain, list]:
     """Time-march: train each window in turn, freezing the earlier ones. Resumes from `chain`.
 
-    cfgs, if given, overrides cfg per window.
+    cfgs, if given, overrides cfg per window. With partial_dir, each window also checkpoints
+    within itself (partial_w{j}.npz, removed once the window is finished).
     """
     chain = chain or Chain([], [], tau_i)
     hists = []
     for j in range(len(chain.windows), len(windows)):
         w = windows[j]
+        part = Path(partial_dir) / f"partial_w{j}.npz" if partial_dir is not None else None
         params, hist = train_window(w, chain, bg_fn, cfgs[j] if cfgs else cfg, log=log,
-                                    tag=f"[w{j} {w.tau_a:.3g}-{w.tau_b:.3g}]", tau_cap=tau_cap)
+                                    tag=f"[w{j} {w.tau_a:.3g}-{w.tau_b:.3g}]", tau_cap=tau_cap, partial=part)
         chain = Chain(chain.windows + [w], chain.params + [params], tau_i)
         hists.append(hist)
         if on_window:
             on_window(chain, hists)
+        if part is not None and part.exists():
+            part.unlink()
     return chain, hists
 
 

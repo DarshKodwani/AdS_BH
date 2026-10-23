@@ -85,7 +85,7 @@ def cmd_train(cfg, bg, out: Path, smoke: bool):
     if chain.windows:
         log(f"resumed {len(chain.windows)} trained windows")
     t_r = rsa_time(bg)
-    tr.train_chain(windows, lambda c: bg, base, cfg["tau_i"], log=log, chain=chain, on_window=on_window,
+    tr.train_chain(windows, lambda c: bg, base, cfg["tau_i"], log=log, chain=chain, on_window=on_window, partial_dir=out,
                    tau_cap=lambda k, c: t_r(k), cfgs=cfgs)
 
 

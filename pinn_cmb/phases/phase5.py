@@ -85,7 +85,7 @@ def cmd_train(cfg, bg, out, smoke, dir34):
 
     log(f"Phase 5: keeping {n_keep} Phase 3/4 windows, training {len(windows) - n_keep} (from {len(chain.windows)})")
     t_r = p34.rsa_time(bg)
-    tr.train_chain(windows, background_fn(bg), base, cfg["tau_i"], log=log, chain=chain, on_window=on_window,
+    tr.train_chain(windows, background_fn(bg), base, cfg["tau_i"], log=log, chain=chain, on_window=on_window, partial_dir=out,
                    tau_cap=lambda k, c: t_r(k))
 
 

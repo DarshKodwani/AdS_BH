@@ -142,7 +142,7 @@ def main():
         hist_file.write_text(json.dumps(prev + [hists[-1]], indent=1))
 
     if not args.eval_only:
-        chain, _ = tr.train_chain(windows, lambda c: bg, tcfg, cfg["tau_i"], log=log, chain=chain, on_window=on_window)
+        chain, _ = tr.train_chain(windows, lambda c: bg, tcfg, cfg["tau_i"], log=log, chain=chain, on_window=on_window, partial_dir=args.out)
     rows = evaluate(chain, bg, cfg, windows[0].layout)
     report(rows, cfg, args.out)
     plot(rows, args.out)
