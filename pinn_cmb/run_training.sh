@@ -2,7 +2,8 @@
 # Resumable pipeline for all remaining phases, two lanes in parallel (2 threads each).
 #   Lane A: phase 3/4 training -> phase 3 eval -> phase 4 C_l -> phase 5 train/validate/inverse
 #   Lane B: phase 2 (train + eval) -> phase 1 v2 (train + eval)
-# Re-run after a container restart: training resumes from the last finished window and
+# Run as a harness-tracked background task (detached nohup processes die when the
+# container idles). Re-run after a container restart: training resumes from the last finished window and
 # finished steps (marked by their output files) are skipped. Exits immediately if running.
 cd "$(dirname "$0")/.."
 if pgrep -f "pinn_cmb.phases" > /dev/null; then echo "already running"; exit 0; fi
