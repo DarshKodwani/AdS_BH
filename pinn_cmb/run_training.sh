@@ -6,7 +6,13 @@
 # container idles). Re-run after a container restart: training resumes from the last finished window and
 # finished steps (marked by their output files) are skipped. Exits immediately if running.
 cd "$(dirname "$0")/.."
-if pgrep -f "pinn_cmb.phases" > /dev/null; then echo "already running"; exit 0; fi
+LANES=${1:-AB}   # run_training.sh [A|B|AB]
+case $LANES in
+  A) PAT="pinn_cmb.phases.phase(34|5)" ;;
+  B) PAT="pinn_cmb.phases.phase(2|1)" ;;
+  *) PAT="pinn_cmb.phases" ;;
+esac
+if pgrep -f "$PAT" > /dev/null; then echo "lane(s) $LANES already running"; exit 0; fi
 export PYTHONPATH=$PWD
 PY=${PY:-/home/user/venv-pinn/bin/python}
 export XLA_FLAGS="--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=2"
@@ -37,6 +43,6 @@ laneB() {
   touch $R/.laneB_done
 }
 
-laneA &
-laneB &
+[[ $LANES == *A* ]] && laneA &
+[[ $LANES == *B* ]] && laneB &
 wait

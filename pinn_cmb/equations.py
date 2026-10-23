@@ -309,8 +309,9 @@ def tca_to_full(tau, y_tca, k, bg: bgm.Background, tca: Layout, full: Layout):
     with theta' from the TCA equation; zero slip would start a transient of width 1/kappa'
     that the full system (and a PINN window) must resolve. The photon shear and
     polarisation take their first-order values: sigma_g = (16/45) theta_g / kappa', and
-    quasi-static Thomson balance gives G_0 = (5/4) F_2, G_2 = (1/4) F_2. Higher multipoles
-    start at zero.
+    quasi-static Thomson balance gives G_0 = (5/4) F_2, G_2 = (1/4) F_2. Higher moments take
+    their leading quasi-static values, X_l = l k / ((2l+1) kappa') X_{l-1} (l >= 3, and G_1 from
+    G_0 and G_2); leaving them at zero starts boundary layers of width 1/kappa' as well.
     """
     b, s, psi, phi_dot, _ = metric(tau, y_tca, k, bg, tca)
     theta = s["theta_gb"]
@@ -324,4 +325,11 @@ def tca_to_full(tau, y_tca, k, bg: bgm.Background, tca: Layout, full: Layout):
         y = y.at[ix[n]].set(s[n])
     y = y.at[ix["theta_b"]].set(theta_g + slip).at[ix["theta_g"]].set(theta_g)
     y = y.at[ix["F_g2"]].set(F2).at[ix["G_g0"]].set(1.25 * F2).at[ix["G_g2"]].set(0.25 * F2)
+    eps = k / b.kappa_dot
+    y = y.at[ix["G_g1"]].set(eps / 3.0 * (1.25 * F2 - 2.0 * 0.25 * F2))
+    for prefix, lmax, start in (("F_g", full.lmax_g, F2), ("G_g", full.lmax_pol, 0.25 * F2)):
+        prev = start
+        for l in range(3, lmax + 1):
+            prev = l * eps / (2 * l + 1) * prev
+            y = y.at[ix[f"{prefix}{l}"]].set(prev)
     return y.at[full.block("F_nu")].set(s["F_nu"])

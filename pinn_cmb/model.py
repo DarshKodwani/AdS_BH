@@ -136,7 +136,7 @@ class Window:
         s = jnp.select(
             [kind == _DENSITY_M, kind == _THETA, kind == _F_NU, kind == _F_G, kind == _G_G],
             [growth, k * g * jnp.sqrt(growth), g**ell, g**ell * q ** (ell - 1),
-             g ** jnp.maximum(ell, 2.0) * q ** jnp.maximum(ell, 1.0)],
+             g ** jnp.maximum(ell, 2.0) * q ** jnp.maximum(ell - 1.0, 1.0)],  # G_0, G_2 ~ F_2
             default=jnp.ones_like(ell),
         )
         return psi0(bg) * s
