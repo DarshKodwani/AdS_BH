@@ -107,11 +107,17 @@ class Window:
     def init(self, key):
         return init_mlp(key, [2 + self.n_cond] + [self.width] * self.depth + [self.n_heads * self.layout.size])
 
-    def tau(self, x):
+    def tau(self, x, k=None):
         return self.tau_a * jnp.exp(self.L * x)
 
-    def x_of(self, tau):
+    def x_of(self, tau, k=None):
         return jnp.log(tau / self.tau_a) / self.L
+
+    def L_of(self, k):
+        return self.L
+
+    def active(self, k):
+        return jnp.ones_like(k)
 
     def features(self, x, k, cond):
         lo, hi = self.log_k_range
@@ -152,7 +158,7 @@ class Window:
         if not self.ansatz:
             return out
         n = out.reshape(self.n_heads, self.layout.size)
-        tau = self.tau(x)
+        tau = self.tau(x, k)
         ph_s = k * bgm.sound_horizon(bg, tau)
         damp = jnp.exp(-((k / bgm.damping_wavenumber(bg, tau)) ** 2))
         ph_f = k * tau
@@ -160,17 +166,55 @@ class Window:
                 + n[3] * jnp.cos(ph_f) + n[4] * jnp.sin(ph_f))
 
     def u(self, params, x, k, cond, u_a, bg):
-        tau = self.tau(x)
+        tau = self.tau(x, k)
         return u_a + (1.0 - jnp.exp(-x / self.eps)) * self.scale(tau, k, bg) * self.bracket(params, x, k, cond, bg)
 
     def residuals(self, params, x, k, cond, u_a, bg):
         """(preconditioned per-variable ODE residual in log time, normalised 00 residual)."""
         u, du_dx = jax.jvp(lambda s: self.u(params, s, k, cond, u_a, bg), (x,), (jnp.ones_like(x),))
-        tau = self.tau(x)
+        tau = self.tau(x, k)
         f = eq.rhs(tau, u, k, bg, self.layout)
-        r = (du_dx / self.L - tau * f) / (self.scale(tau, k, bg) * self.precond(tau, k, bg))
+        r = (du_dx / self.L_of(k) - tau * f) / (self.scale(tau, k, bg) * self.precond(tau, k, bg))
         c = eq.observables(tau, u, k, bg, self.layout)["constraint_00"]
         return r, c
+
+
+@dataclass(frozen=True, eq=False)
+class ModeWindow(Window):
+    """Window whose start depends on the mode: tau in [tau_start(k), tau_b], split by fractions.
+
+    Used after the RSA switch, which happens at the k-dependent tau_R(k) = max(45/k, tau_fs)
+    (CLASS's trigger). The window covers the fraction [frac_a, frac_b] of
+    ln(tau_b / tau_start(k)); a mode is inactive if tau_start(k) >= max_start.
+    tau_a is unused (kept for the dataclass); tau_start must be a jnp function of k.
+    """
+
+    tau_start: object = None
+    frac_a: float = 0.0
+    frac_b: float = 1.0
+    max_start: float = np.inf
+
+    def __hash__(self):
+        return hash((super().__hash__(), self.tau_start, self.frac_a, self.frac_b, self.max_start))
+
+    def _ends(self, k):
+        ts = jnp.minimum(self.tau_start(k), 0.999 * self.tau_b)
+        lt = jnp.log(self.tau_b / ts)
+        return jnp.log(ts) + self.frac_a * lt, (self.frac_b - self.frac_a) * lt
+
+    def tau(self, x, k=None):
+        la, L = self._ends(k)
+        return jnp.exp(la + L * x)
+
+    def x_of(self, tau, k=None):
+        la, L = self._ends(k)
+        return (jnp.log(tau) - la) / L
+
+    def L_of(self, k):
+        return self._ends(k)[1]
+
+    def active(self, k):
+        return (self.tau_start(k) < self.max_start).astype(float)
 
 
 @dataclass
@@ -181,34 +225,99 @@ class Chain:
     params: list = field(default_factory=list)
     tau_i: float = 1e-3
 
-    def start_state(self, j, k, cond, bg):
-        """Exact start state of window j: the adiabatic IC, or the previous window's end state."""
+    def _fixed_states(self, upto, k, cond, bg):
+        """Start states of the fixed (non-mode) windows 0..upto-1 by time-marching."""
         u = ics.initial_state(k, self.tau_i, bg, self.windows[0].layout)
-        for i in range(j):
+        states = []
+        for i in range(upto):
             w = self.windows[i]
-            u = w.u(self.params[i], jnp.float64(1.0), k, cond, u, bg)
-            u = eq.switch_layout(w.tau_b, u, k, bg, w.layout, self.windows[i + 1].layout)
-        return u
+            states.append(u)
+            if i + 1 < len(self.windows) and not isinstance(self.windows[i + 1], ModeWindow):
+                u = w.u(self.params[i], jnp.float64(1.0), k, cond, u, bg)
+                u = eq.switch_layout(w.tau_b, u, k, bg, w.layout, self.windows[i + 1].layout)
+        return states, u
 
-    def state(self, tau, k, cond, bg):
-        """State vector at a scalar tau (python-side window lookup; tau must be concrete)."""
-        j = next(i for i, w in enumerate(self.windows) if tau <= w.tau_b * (1 + 1e-12))
+    def start_state(self, j, k, cond, bg):
+        """Exact start state of window j: the adiabatic IC, or the previous window's end state.
+
+        A ModeWindow with frac_a = 0 starts from the fixed chain evaluated at tau_start(k)
+        (selected among the windows of the same layout family), mapped to its layout.
+        """
         w = self.windows[j]
-        return w, w.u(self.params[j], w.x_of(tau), k, cond, self.start_state(j, k, cond, bg), bg)
+        if not isinstance(w, ModeWindow):
+            return self._fixed_states(j, k, cond, bg)[1]
+        if w.frac_a > 0:
+            prev = self.windows[j - 1]
+            return prev.u(self.params[j - 1], jnp.float64(1.0), k, cond, self.start_state(j - 1, k, cond, bg), bg)
+        fixed = [i for i in range(j) if not isinstance(self.windows[i], ModeWindow)]
+        states, _ = self._fixed_states(len(fixed), k, cond, bg)
+        ts = jnp.minimum(w.tau_start(k), 0.999 * w.tau_b)
+        src = self.windows[fixed[-1]].layout
+        cands, conds = [], []
+        for i in fixed:
+            wi = self.windows[i]
+            if wi.layout != src:
+                continue
+            x = jnp.clip(wi.x_of(ts), 0.0, 1.0)
+            cands.append(wi.u(self.params[i], x, k, cond, states[i], bg))
+            conds.append((ts >= wi.tau_a) & (ts <= wi.tau_b))
+        u = jnp.select(conds, cands, default=cands[-1])
+        return eq.switch_layout(ts, u, k, bg, src, w.layout)
+
+    def state(self, tau: float, k, cond, bg):
+        """(window, state vector) at a concrete scalar tau for a concrete k."""
+        for j, (a, b) in enumerate(self.ranges(k)):
+            if a <= tau <= b * (1 + 1e-12):
+                w = self.windows[j]
+                return w, w.u(self.params[j], w.x_of(tau, k), k, cond, self.start_state(j, k, cond, bg), bg)
+        raise ValueError(f"tau={tau} outside the chain")
+
+    def ranges(self, k) -> list[tuple[float, float]]:
+        """Concrete tau range of each window for a concrete k (empty ranges have a >= b)."""
+        mode = [w for w in self.windows if isinstance(w, ModeWindow)]
+        t_switch = float(jnp.minimum(mode[0].tau_start(k), mode[0].tau_b)) if mode else np.inf
+        out = []
+        for w in self.windows:
+            if isinstance(w, ModeWindow):
+                if float(w.active(k)) == 0.0:
+                    out.append((np.inf, -np.inf))
+                else:
+                    out.append((float(w.tau(0.0, k)), float(w.tau(1.0, k))))
+            elif mode and w.layout == self.windows[[isinstance(x, ModeWindow) for x in self.windows].index(True) - 1].layout:
+                out.append((w.tau_a, min(w.tau_b, t_switch)))
+            else:
+                out.append((w.tau_a, w.tau_b))
+        return out
 
     def observables(self, taus: np.ndarray, k, cond, bg) -> dict:
         """Observables along an increasing tau grid (one vmapped call per window)."""
         out: dict[str, list] = {}
-        edges = [self.windows[0].tau_a] + [w.tau_b for w in self.windows]
+        rng = self.ranges(k)
+        last_b = max(b for a, b in rng)
         for j, w in enumerate(self.windows):
-            last = j == len(self.windows) - 1
-            sel = (taus >= edges[j]) & ((taus < edges[j + 1]) | (last & (taus <= edges[j + 1])))
+            a, b = rng[j]
+            sel = (taus >= a) & ((taus < b) | ((b == last_b) & (taus <= b)))
             if not sel.any():
                 continue
             u_a = self.start_state(j, k, cond, bg)
             t = jnp.asarray(taus[sel])
-            uu = jax.vmap(lambda s: w.u(self.params[j], w.x_of(s), k, cond, u_a, bg))(t)
+            uu = jax.vmap(lambda s: w.u(self.params[j], w.x_of(s, k), k, cond, u_a, bg))(t)
             o = jax.vmap(lambda tt, yy: eq.observables(tt, yy, k, bg, w.layout))(t, uu)
             for n, v in o.items():
                 out.setdefault(n, []).append(np.asarray(v))
         return {n: np.concatenate(v) for n, v in out.items()}
+
+    def states(self, taus: np.ndarray, k, cond, bg) -> list[tuple[eq.Layout, np.ndarray, jax.Array]]:
+        """Raw (layout, taus, states) per window, for source functions."""
+        res = []
+        rng = self.ranges(k)
+        last_b = max(b for a, b in rng)
+        for j, w in enumerate(self.windows):
+            a, b = rng[j]
+            sel = (taus >= a) & ((taus < b) | ((b == last_b) & (taus <= b)))
+            if not sel.any():
+                continue
+            u_a = self.start_state(j, k, cond, bg)
+            t = jnp.asarray(taus[sel])
+            res.append((w.layout, sel, jax.vmap(lambda s: w.u(self.params[j], w.x_of(s, k), k, cond, u_a, bg))(t)))
+        return res

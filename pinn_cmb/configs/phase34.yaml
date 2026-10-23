@@ -1,0 +1,27 @@
+# Phases 3-4: one time-marching chain from tau_i to tau0, fiducial cosmology.
+#   TCA windows -> full hierarchy (through recombination) -> per-mode RSA windows,
+# with CLASS's RSA trigger tau_R(k) = max(45/k, tau_free_streaming). Each mode trains
+# full-hierarchy windows only until its tau_R(k).
+k_range: [5.0e-6, 0.12]          # covers C_l^TT for l <= 500
+tau_i: 1.0e-3
+tca_edges: [1.0e-3, 1.0, 10.0, 30.0]          # TCA valid at tau=30 for all k <= 0.12
+full_edges: [30, 60, 100, 150, 200, 240, 270, 300, 340, 400, 480, 600, 800, 1100, 1600, 2400, 3600, 5500, 8500]
+rsa_windows: 3                    # fractions of ln(tau0 / tau_R(k))
+lmax: {g: 12, pol: 10, nu: 17}   # CLASS defaults
+network: {width: 96, depth: 4, ansatz: true}
+train:
+  adam_steps: 15000
+  lbfgs_steps: 4000
+  n_k: 64
+  n_t: 64
+  n_k_lbfgs: 64
+  n_t_lbfgs: 64
+  w_constraint: 1.0
+train_rsa: {w_constraint: 0.0}   # RSA is not an exact solution of the 00 equation
+evaluation:
+  n_test_k: 12
+  seed: 7
+  tau_max_phase3_over_rec: 2.0
+  phase3_tolerance: 1.0e-2
+  cl_lmax: 500
+  cl_tolerance: 1.0e-2

@@ -21,7 +21,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from .model import Chain, Window
+from .model import Chain, ModeWindow, Window
 
 
 @dataclass
@@ -75,12 +75,12 @@ def make_loss(w: Window, chain: Chain, j: int, bg_fn: Callable, w_c: float):
 
 def collocation_times(w: Window, key, k, cond, n_t, tau_cap):
     """Stratified x in [0, x_end] per mode; x_end < 1 where the mode's active range ends early."""
-    if tau_cap is None:
+    if tau_cap is None or isinstance(w, ModeWindow):
         x_end = jnp.ones_like(k)
     else:
-        x_end = jnp.clip(w.x_of(jax.vmap(tau_cap)(k, cond)), 0.0, 1.0)
+        x_end = jnp.clip(w.x_of(jax.vmap(tau_cap)(k, cond), k), 0.0, 1.0)
     xs = jax.vmap(lambda kk: stratified(kk, n_t))(jax.random.split(key, k.shape[0])) * x_end[:, None]
-    return xs, (x_end > 0.02).astype(float)
+    return xs, (x_end > 0.02).astype(float) * w.active(k)
 
 
 def start_states(chain: Chain, j: int, k, cond, bg_fn):

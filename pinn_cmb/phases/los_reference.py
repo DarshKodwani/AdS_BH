@@ -75,10 +75,13 @@ def main():
     ap.add_argument("--lmax", type=int, default=500)
     ap.add_argument("--k-max", type=float, default=0.15)
     ap.add_argument("--nk", type=int, default=160)
+    ap.add_argument("--lmax-hier", type=int, nargs=3, default=None, metavar=("G", "POL", "NU"))
     ap.add_argument("--out", type=Path, default=HERE / "results" / "los_reference")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
+    if args.lmax_hier:
+        LMAX.update(lmax_g=args.lmax_hier[0], lmax_pol=args.lmax_hier[1], lmax_nu=args.lmax_hier[2])
     bg = bgm.build_background()
     tau_grid = los.default_tau_grid(bg)
     k_src = np.concatenate([np.geomspace(1e-5, 2e-3, 30, endpoint=False), np.linspace(2e-3, args.k_max, args.nk)])
@@ -92,6 +95,8 @@ def main():
     ell_c, cl_c = class_cl(max(2500, args.lmax))  # CLASS ties its k range to lmax; converge it
     ratio = cl / cl_c[ells] - 1.0
     tag = args.scheme if args.scheme == "class" else f"fixed_tca{args.tau_tca:g}_rsa{args.tau_rsa:g}"
+    if args.lmax_hier:
+        tag += "_lmax" + "-".join(map(str, args.lmax_hier))
     print(f"[{tag}] sources {t_src:.0f}s; max|C_l/C_l^CLASS - 1| = {np.max(np.abs(ratio)):.2e} "
           f"(l<=30: {np.max(np.abs(ratio[ells <= 30])):.2e}, l>30: {np.max(np.abs(ratio[ells > 30])):.2e})")
     np.savez(args.out / f"{tag}.npz", ells=ells, cl=cl, cl_class=cl_c[ells], k_src=k_src, tau=tau_grid, **S)
