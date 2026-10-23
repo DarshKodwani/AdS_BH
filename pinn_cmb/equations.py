@@ -301,19 +301,27 @@ def switch_layout(tau, y, k, bg: bgm.Background, src: Layout, dst: Layout):
 
 
 def tca_to_full(tau, y_tca, k, bg: bgm.Background, tca: Layout, full: Layout):
-    """Map a TCA state onto the full hierarchy at the switch time.
+    """Map a TCA state onto the full hierarchy at the switch time, on the slow manifold.
 
-    theta_b = theta_g = theta_gb. The photon shear and polarisation take their first-order
-    tight-coupling values: sigma_g = (16/45) theta_g / kappa', and quasi-static Thomson
-    balance gives G_0 = (5/4) F_2, G_2 = (1/4) F_2. Higher multipoles start at zero.
+    theta_gb is the momentum-weighted mean (theta_g + R theta_b)/(1+R). The baryon-photon
+    slip takes its first-order tight-coupling value from the quasi-static baryon Euler
+    equation, (kappa'/R)(theta_g - theta_b) = theta' + H theta - c_s^2 k^2 delta_b - k^2 psi,
+    with theta' from the TCA equation; zero slip would start a transient of width 1/kappa'
+    that the full system (and a PINN window) must resolve. The photon shear and
+    polarisation take their first-order values: sigma_g = (16/45) theta_g / kappa', and
+    quasi-static Thomson balance gives G_0 = (5/4) F_2, G_2 = (1/4) F_2. Higher multipoles
+    start at zero.
     """
-    b = bgm.at(bg, tau)
-    s = unpack(y_tca, tca)
-    F2 = 32.0 / 45.0 * s["theta_gb"] / b.kappa_dot
+    b, s, psi, phi_dot, _ = metric(tau, y_tca, k, bg, tca)
+    theta = s["theta_gb"]
+    theta_dot = tca_theta_dot(k, b, s["delta_b"], s["delta_g"], theta, psi)
+    slip = -b.R / b.kappa_dot * (theta_dot + b.conf_H * theta - b.cb2 * k**2 * s["delta_b"] - k**2 * psi)
+    theta_g = theta - b.R / (1.0 + b.R) * slip
+    F2 = 32.0 / 45.0 * theta_g / b.kappa_dot
     y = jnp.zeros(full.size)
     ix = full.index
     for n in ("phi", "delta_c", "theta_c", "delta_b", "delta_g", "delta_nu", "theta_nu"):
         y = y.at[ix[n]].set(s[n])
-    y = y.at[ix["theta_b"]].set(s["theta_gb"]).at[ix["theta_g"]].set(s["theta_gb"])
+    y = y.at[ix["theta_b"]].set(theta_g + slip).at[ix["theta_g"]].set(theta_g)
     y = y.at[ix["F_g2"]].set(F2).at[ix["G_g0"]].set(1.25 * F2).at[ix["G_g2"]].set(0.25 * F2)
     return y.at[full.block("F_nu")].set(s["F_nu"])

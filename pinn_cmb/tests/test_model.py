@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from pinn_cmb import background as bgm
 from pinn_cmb import equations as eq
 from pinn_cmb import initial_conditions as ics
 from pinn_cmb.model import Chain, Window
@@ -41,7 +42,11 @@ def test_layout_switch_maps_tca_state_to_full_hierarchy(bg):
     u_full = ch.start_state(2, k, c, bg)
     u_tca = ch.windows[1].u(ch.params[1], jnp.float64(1.0), k, c, ch.start_state(1, k, c, bg), bg)
     assert u_full.shape == (FULL.size,)
-    assert u_full[FULL.index["theta_b"]] == u_tca[TCA.index["theta_gb"]] == u_full[FULL.index["theta_g"]]
+    R = float(bgm.at(bg, 30.0).R)
+    mean = (u_full[FULL.index["theta_g"]] + R * u_full[FULL.index["theta_b"]]) / (1 + R)
+    np.testing.assert_allclose(mean, u_tca[TCA.index["theta_gb"]], rtol=1e-12)
+    slip = u_full[FULL.index["theta_b"]] - u_full[FULL.index["theta_g"]]
+    assert 0 < abs(float(slip)) < 1e-2 * abs(float(u_tca[TCA.index["theta_gb"]]))
 
 
 def test_scales_positive_and_superhorizon_powers(bg):
