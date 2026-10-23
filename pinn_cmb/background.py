@@ -65,6 +65,7 @@ class Background(NamedTuple):
     vis: Spline | None = None  # visibility g = kappa' e^-kappa [1/Mpc] vs ln tau (CLASS table)
     exp_m_kappa: Spline | None = None  # e^-kappa vs ln tau (CLASS table)
     tau_free_streaming: float = 0.0  # CLASS: first tau with 1/(kappa' tau) > 5 (RSA trigger)
+    mu0: float = 0.0  # Phase 5: mu(a) = 1 + mu0 Omega_Lambda(a) / Omega_Lambda,0
 
 
 class BgAt(NamedTuple):
@@ -77,6 +78,7 @@ class BgAt(NamedTuple):
     kappa_dot: jax.Array  # Thomson opacity a n_e sigma_T
     cb2: jax.Array  # baryon sound speed squared
     R: jax.Array  # 3 rho_b / (4 rho_g)
+    mu: jax.Array = 1.0  # G_eff / G in the perturbed Einstein equations (Phase 5); 1 in GR
 
 
 C_KM_S = 299792.458
@@ -163,6 +165,7 @@ def at(bg: Background, tau: jax.Array) -> BgAt:
         kappa_dot=jnp.exp(spline_eval(bg.ln_kappa_dot, x)),
         cb2=jnp.exp(spline_eval(bg.ln_cb2, x)),
         R=0.75 * rho_b / rho_g,
+        mu=1.0 + bg.mu0 * (bg.rho0[4] / rho_tot) / (bg.rho0[4] / jnp.sum(bg.rho0)),
     )
 
 

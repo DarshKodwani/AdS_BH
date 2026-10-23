@@ -83,12 +83,12 @@ class Layout:
 
 def psi_from_ij(phi, k, b: bgm.BgAt, sigma_g, sigma_nu):
     """Einstein ij-traceless (M&B 23d): k^2 (phi - psi) = 12 pi G a^2 sum (rho+P) sigma."""
-    return phi - 6.0 * b.a**2 / k**2 * (b.rho_g * sigma_g + b.rho_nu * sigma_nu)
+    return phi - 6.0 * b.mu * b.a**2 / k**2 * (b.rho_g * sigma_g + b.rho_nu * sigma_nu)
 
 
 def phi_dot_from_0i(k, b: bgm.BgAt, psi, rho_plus_p_theta):
     """Einstein 0i (M&B 23b): k^2 (phi' + H psi) = 4 pi G a^2 sum (rho+P) theta."""
-    return -b.conf_H * psi + 1.5 * b.a**2 / k**2 * rho_plus_p_theta
+    return -b.conf_H * psi + 1.5 * b.mu * b.a**2 / k**2 * rho_plus_p_theta
 
 
 def constraint_00(k, b: bgm.BgAt, phi, phi_dot, psi, delta_rho):
@@ -99,7 +99,7 @@ def constraint_00(k, b: bgm.BgAt, phi, phi_dot, psi, delta_rho):
     """
     lhs1 = k**2 * phi
     lhs2 = 3.0 * b.conf_H * (phi_dot + b.conf_H * psi)
-    rhs = -1.5 * b.a**2 * delta_rho
+    rhs = -1.5 * b.mu * b.a**2 * delta_rho
     return (lhs1 + lhs2 - rhs) / (jnp.abs(lhs1) + jnp.abs(lhs2) + jnp.abs(rhs))
 
 

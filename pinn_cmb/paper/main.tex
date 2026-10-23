@@ -1,0 +1,121 @@
+\documentclass[prd,twocolumn,superscriptaddress,nofootinbib,floatfix]{revtex4-2}
+\usepackage{amsmath,amssymb,graphicx,booktabs,xcolor,hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black}
+\input{numbers}
+
+\newcommand{\kd}{\dot\kappa}
+\newcommand{\Hc}{\mathcal{H}}
+\newcommand{\taurec}{\tau_{\rm rec}}
+
+\begin{document}
+
+\title{Data-free physics-informed neural networks for the linear Einstein--Boltzmann equations of the cosmic microwave background}
+
+\author{[Author names]}
+\affiliation{[Affiliations]}
+
+\begin{abstract}
+\input{abstract}
+\end{abstract}
+
+\maketitle
+
+%=====================================================================================
+\section{Introduction}
+%=====================================================================================
+
+Predictions for cosmic microwave background (CMB) anisotropies rest on the linearised Einstein--Boltzmann equations, solved for every Fourier mode by codes such as \textsc{camb}~\cite{CAMB} and \textsc{class}~\cite{CLASS1,CLASS2}. Two developments have changed how these predictions are used. Neural emulators~\cite{CosmicNet1,CosmicNet2,CosmoPower,CosmoPowerJAX} replace a Boltzmann code by a network trained on its outputs, and differentiable Boltzmann codes~\cite{DISCOEB,SymBoltz,ABCMB} provide exact gradients of observables with respect to parameters. Emulators are fast but need a solver to produce training data, which ties them to models that some code already implements. Differentiable solvers are exact but solve one cosmology at a time.
+
+Physics-informed neural networks (PINNs)~\cite{Lagaris1998,Raissi2019} sit between the two. A PINN is trained on the residual of the governing equations rather than on solutions, so it needs no training data, and a single network can represent a whole family of solutions when the parameters are network inputs (a ``bundle''~\cite{Flamant2020}). In cosmology PINN bundles have so far been applied to the background expansion~\cite{Chantada2023,Chantada2024} and to the sub-horizon growth equation for matter, a single second-order ODE~\cite{GomezBachar2025}. The latter work describes itself as a first step towards the coupled Boltzmann system. Related neural approaches solve the homogeneous Boltzmann equations of particle decoupling~\cite{NBE}. To our knowledge no PINN has been applied to the coupled photon--baryon--dark-matter--neutrino perturbation system that determines the CMB.
+
+This system is a hard test for PINNs. It is stiff (Thomson scattering is $10^{3}$--$10^{9}$ times faster than the expansion before recombination), multi-scale (the integration covers seven decades in conformal time and the variables span many orders of magnitude), oscillatory (acoustic waves and free streaming), and it carries a constraint (the Einstein $00$ equation) that the evolution equations propagate but do not enforce. This paper asks whether a data-free PINN can nevertheless reach the accuracy needed for CMB predictions, and documents what it takes.
+
+Our contributions are:
+\begin{enumerate}
+\item A data-free PINN for the full linear system in conformal Newtonian gauge: tight-coupled photon--baryon fluid, the photon temperature and polarisation hierarchies with Thomson scattering, massless neutrinos, cold dark matter, and the metric. The network is trained as a bundle over wavenumber, and over $(\omega_b,\omega_c)$ in the tight-coupling era.
+\item A set of ingredients without which the training fails, each isolated in controlled experiments (Sec.~\ref{sec:pilots}): constraint-consistent initial conditions, the Einstein $00$ residual as a loss term, time-dependent physical scaling of the outputs, Thomson-row preconditioning with a slow-manifold hand-over at the tight-coupling switch, and time-marching over a chain of networks.
+\item Line-of-sight CMB temperature spectra $C_\ell^{TT}$ computed from PINN source functions, validated against \textsc{class}.
+\item A demonstration outside $\Lambda$CDM: a bundle over a late-time modification of the effective Newton constant for perturbations, used as a data-free, differentiable emulator in an inverse problem.
+\end{enumerate}
+We report all accuracy against an independent stiff ODE solver that integrates exactly the same equations, so that PINN error and modelling error are separated, and against \textsc{class}. We also report where the method falls short of its targets and what it costs.
+
+%=====================================================================================
+\section{Equations and reference solutions}\label{sec:equations}
+%=====================================================================================
+
+\subsection{Perturbation equations}
+We work in conformal Newtonian gauge, $ds^2=a^2[-(1+2\psi)d\tau^2+(1-2\phi)d\mathbf{x}^2]$, with the variables and conventions of Ma \& Bertschinger~\cite{MaBertschinger1995} (MB95): density contrasts $\delta_i$, velocity divergences $\theta_i$, anisotropic stresses $\sigma_i$, and Legendre moments $F_{\gamma\ell}$, $G_{\gamma\ell}$, $F_{\nu\ell}$ of the photon intensity, photon polarisation and massless-neutrino distributions, truncated at $\ell_{\max}$ with the MB95 scheme. The metric is evolved with the $0i$ Einstein equation,
+\begin{equation}
+\dot\phi = -\Hc\psi + \frac{4\pi G a^2}{k^2}\sum_i(\bar\rho_i+\bar P_i)\theta_i ,\label{eq:phidot}
+\end{equation}
+and $\psi$ follows algebraically from the traceless $ij$ equation, $k^2(\phi-\psi)=12\pi G a^2\sum_i(\bar\rho_i+\bar P_i)\sigma_i$. The $00$ equation,
+\begin{equation}
+C_{00}\equiv k^2\phi+3\Hc(\dot\phi+\Hc\psi)+4\pi G a^2\delta\rho = 0 ,\label{eq:c00}
+\end{equation}
+is not used for evolution; we report it normalised by the sum of the magnitudes of its three terms. CDM, baryons, photons and neutrinos obey the MB95 equations (eqs.~30, 50, 64--65 of the arXiv version, with the baryon equation of their \S5.6). Before recombination we use the zeroth-order tight-coupling approximation (TCA): $\theta_b=\theta_\gamma\equiv\theta_{\gamma b}$, $\sigma_\gamma=0$, and
+\begin{equation}
+\dot\theta_{\gamma b}=\frac{-\Hc R\,\theta_{\gamma b}+\tfrac14 k^2\delta_\gamma+R c_s^2k^2\delta_b}{1+R}+k^2\psi ,
+\end{equation}
+with $R=3\bar\rho_b/4\bar\rho_\gamma$. After the TCA we evolve the full photon hierarchy with polarisation and Thomson coupling. Deep in the matter era we optionally use the radiation-streaming approximation (RSA) of \textsc{class}~\cite{CLASS2}, $\delta_{\gamma,\nu}=-4\phi$, $\theta_{\gamma,\nu}=6\dot\phi$, $\sigma=0$, switched on per mode at $\tau_R(k)=\max(45/k,\tau_{\rm fs})$ exactly as in \textsc{class}.
+
+The background ($a$, $\Hc$, $\bar\rho_i$), the Thomson opacity $\kd=an_e\sigma_T$, the baryon sound speed, the sound horizon $r_s$ and the Silk scale $k_D$ are taken from \textsc{class} and tabulated as cubic splines that JAX~\cite{JAX} can differentiate. For the parameter bundle of Sec.~\ref{sec:phase2} we use an analytic radiation-plus-matter background that is differentiable in $(\omega_b,\omega_c)$; it agrees with \textsc{class} to $10^{-9}$ in $a$, $\Hc$ and $\bar\rho_i$ before recombination. The fiducial cosmology is Planck 2018 $\Lambda$CDM~\cite{Planck2018} with massless neutrinos ($N_{\rm eff}=3.046$) and no reionisation.
+
+A single module implements the right-hand side $f(\tau,u;k)$ of all equations. Both the PINN residual and the reference solver call it, so any disagreement between them is a training error, not a modelling difference.
+
+\subsection{Constraint-consistent initial conditions}\label{sec:ics}
+MB95 give the adiabatic growing mode in Newtonian gauge to leading order in $k\tau$ and $\tau/\tau_{\rm eq}$. These initial conditions violate Eq.~\eqref{eq:c00} at $\mathcal{O}(\tau_i/\tau_{\rm eq})$. Evolving $\phi$ with Eq.~\eqref{eq:phidot} admits one extra solution beyond those of the full Einstein equations, along which $C_{00}\propto 1/a$; relative to the physical terms it grows like $\tau$ in the radiation era. A violation of $2\times10^{-5}$ at $\tau_i=0.01$\,Mpc grew to $5\%$ by recombination and produced 2--6\% errors in every variable compared with \textsc{class}. We therefore use the \textsc{class} initial conditions: the synchronous-gauge expansion to first order in $(k\tau)^2$ and $\omega\tau$ ($\omega=a\bar\rho_m/\sqrt{\bar\rho_r}$), followed by the gauge transformation with $\alpha=(\dot h+6\dot\eta)/2k^2$ taken from the $00$ and $0i$ equations. The initial state then satisfies Eq.~\eqref{eq:c00} to $<10^{-8}$, and reduces to MB95 eq.~98 to $2\times10^{-3}$. We verified the propagation property directly: on the constraint surface $dC_{00}/d\tau$ vanishes to $10^{-9}$ relative for both state layouts.
+
+\subsection{Reference solver and validation against \textsc{class}}
+The reference solver integrates the same right-hand side with \texttt{scipy}'s Radau method ($r_{\rm tol}=10^{-10}$ unless stated), using exact Jacobians from JAX, with the same TCA/full/RSA switches as the network. Against \textsc{class} (Newtonian gauge, matched $\ell_{\max}$, late-time approximations off) it agrees to $\le\NphaseZeroWorst$ on $\phi$, $\delta_c$, $\delta_\gamma$ for $k=0.01$ and $0.05$\,Mpc$^{-1}$ up to $2\taurec$. Without the TCA, every variable agrees to $\sim2\times10^{-4}$; the remaining difference comes from our zeroth-order TCA and vanishes linearly as the TCA switch is moved earlier.
+
+Our line-of-sight code uses the \textsc{class} Newtonian-gauge source functions and radial functions~\cite{SeljakZaldarriaga1996}. Fed \textsc{class}'s own source functions it reproduces \textsc{class} $C_\ell^{TT}$ to $\le2\times10^{-4}$ (except $1.4\times10^{-3}$ at one multipole). Fed reference-solver sources with the \textsc{class} approximation schedule it reproduces \textsc{class} to $\le\NlosRefWorst$ for $\ell\le500$. \textsc{class} must be run with a high $\ell_{\max}$ for this comparison, because it ties its $k$ range to $\ell_{\max}$.
+
+%=====================================================================================
+\section{PINN formulation}\label{sec:method}
+%=====================================================================================
+
+\subsection{Windows, hard initial conditions and output scaling}
+A window network $N$ covers $\tau\in[\tau_a,\tau_b]$ with input $x=\ln(\tau/\tau_a)/\ln(\tau_b/\tau_a)\in[0,1]$, the normalised $\ln k$, and optionally normalised cosmological parameters $\mathbf{c}$. It represents the state of one equation layout (TCA, full hierarchy or RSA) as
+\begin{equation}
+u(x)=u_a+\left(1-e^{-x/\epsilon}\right)S(\tau,k)\odot B(x,k,\mathbf{c}) ,\label{eq:hardic}
+\end{equation}
+which reproduces the window's initial state $u_a$ exactly~\cite{Lagaris1998}. $S$ is the physical magnitude of each variable. It is time-dependent: outside the horizon $\theta\propto k^2\tau$ and $F_\ell\propto(k\tau)^\ell$, rolling over at $k\tau\sim1$; photon multipoles with $\ell\ge2$ are additionally suppressed by $(k+\Hc)/(k+\Hc+\kd)$ during tight coupling; matter densities grow as $(k\tau)^2$ in the matter era. Without this scaling the loss is dominated by a $1/(k\tau)^2$ amplification in Eq.~\eqref{eq:phidot}: the initial loss was $3\times10^{11}$ and training failed. With it the initial loss is $\mathcal{O}(1)$.
+
+$B$ is either the network output or the oscillation ansatz
+\begin{equation}
+B=N_0+e^{-k^2/k_D^2}\left(N_1\cos kr_s+N_2\sin kr_s\right)+N_3\cos k\tau+N_4\sin k\tau ,
+\end{equation}
+with smooth network heads $N_i$. The acoustic phase $kr_s$ and damping envelope carry the photon--baryon oscillations, and $k\tau$ the free-streaming phase. A related basis was used as network \emph{input} features by CosmicNet~\cite{CosmicNet1}; here it enters the output structure.
+
+\subsection{Loss}
+The loss of a window is
+\begin{equation}
+\mathcal{L}=\Big\langle \frac{1}{n}\sum_{i}\Big[\frac{\partial_x u_i/L-\tau f_i(\tau,u)}{S_i\,d_i}\Big]^2 + w_c\,C_{00}^2\Big\rangle ,\label{eq:loss}
+\end{equation}
+averaged over collocation points, with $L=\ln(\tau_b/\tau_a)$. The first term is the log-time residual of each equation in units of the variable's size. The factor $d_i=1+\tau|\partial f_i/\partial u_i|_{\rm Thomson}$ preconditions the stiff Thomson rows ($\theta_\gamma$, $\theta_b$, $F_{\gamma\ell}$, $G_{\gamma\ell}$), so that quasi-static balances are learned at $\mathcal{O}(1)$ weight. The second term is the normalised $00$ residual with $w_c=1$. It is not optional: it is the only term that penalises the constraint-violating solution of Sec.~\ref{sec:ics}. In RSA windows, and for the modified-gravity model of Sec.~\ref{sec:phase5}, the $00$ equation is not an exact consequence of the evolution equations, and we set $w_c=0$.
+
+\subsection{Time-marching and per-mode switches}
+A single network over the whole time range fails on oscillating modes (Sec.~\ref{sec:pilots}). We instead train a chain of windows in sequence. Window $j$ starts from the frozen window $j-1$ evaluated at its end, mapped between layouts where they differ. At the TCA$\to$full switch we hand over the first-order tight-coupling state: the baryon--photon slip from the quasi-static baryon Euler equation, $\sigma_\gamma=\frac{16}{45}\theta_\gamma/\kd$ and the corresponding polarisation moments. Handing over zero slip starts a transient of width $1/\kd$ that the next window cannot represent; its loss was three orders of magnitude above that of every other window. The TCA$\to$full switch is at a fixed $\tau$ at which the TCA holds for all modes in the bundle. The full$\to$RSA switch depends on $k$, and we found it must: switching all modes to the RSA at a common time ruins the low-$\ell$ spectrum (Sec.~\ref{sec:phase4}). Each mode is therefore trained in the full-hierarchy windows only up to its $\tau_R(k)$, and the RSA windows are parameterised in $\ln(\tau/\tau_R(k))$, starting from the full chain evaluated at $\tau_R(k)$.
+
+\subsection{Training}
+Each window is an MLP (4 hidden layers of 64--96 $\tanh$ units) trained with Adam (learning rate $10^{-3}$, cosine decay) on resampled collocation sets, followed by L-BFGS on a fixed, denser set. Collocation is a tensor product of stratified $\ln k$ (and Latin-hypercube parameters) with stratified window times. Training is in float64 on CPU. No reference solution enters training.
+
+%=====================================================================================
+\section{Results}\label{sec:results}
+%=====================================================================================
+
+\input{results}
+
+%=====================================================================================
+\section{Discussion}\label{sec:discussion}
+%=====================================================================================
+
+\input{discussion}
+
+\begin{acknowledgments}
+[Acknowledgments.] This work used \textsc{class}, JAX, \texttt{optax}, \texttt{scipy} and \texttt{numpy}.
+\end{acknowledgments}
+
+\bibliography{refs}
+
+\end{document}
