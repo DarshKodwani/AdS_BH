@@ -1,3 +1,5 @@
 __pycache__/
 .pytest_cache/
 .venv/
+results/*/nohup.log
+results/*/train.log
